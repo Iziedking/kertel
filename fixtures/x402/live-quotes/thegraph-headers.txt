@@ -1,0 +1,16 @@
+HTTP/1.1 402 Payment Required
+Date: Sun, 06 Sep 2026 23:31:06 GMT
+Content-Length: 0
+Connection: keep-alive
+payment-required: eyJ4NDAyVmVyc2lvbiI6MiwiZXJyb3IiOiJQYXltZW50LVNpZ25hdHVyZSBoZWFkZXIgaXMgcmVxdWlyZWQiLCJyZXNvdXJjZSI6eyJ1cmwiOiJodHRwOi8vbWFpbm5ldC10aGVncmFwaC1hcmJpdHJ1bS0wMi1ldS13ZXN0My50aGVncmFwaC5jb20vc3ViZ3JhcGhzL2lkLzV6dlI4MlFvYVhZRnlERUtMWjl0NnY5YWRnbnB0eFlwS3BTYnh0Z1ZFTkZWIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYW1vdW50IjoiMTAwMDAiLCJwYXlUbyI6IjB4NzlEQzM0RTQxQjJiNTkxMDc4ZDNkRTIyMkM0M0VjYWFCRDUyRmNDQiIsIm1heFRpbWVvdXRTZWNvbmRzIjozMDAsImFzc2V0IjoiMHg4MzM1ODlmQ0Q2ZURiNkUwOGY0YzdDMzJENGY3MWI1NGJkQTAyOTEzIiwiZXh0cmEiOnsiYXNzZXRUcmFuc2Zlck1ldGhvZCI6ImVpcDMwMDkiLCJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9fV19
+vary: origin, access-control-request-method, access-control-request-headers
+access-control-allow-origin: *
+strict-transport-security: max-age=31536000; includeSubDomains
+access-control-allow-credentials: true
+access-control-allow-methods: PUT, GET, POST, OPTIONS
+access-control-allow-headers: DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization
+access-control-max-age: 3600
+cf-cache-status: DYNAMIC
+Server: cloudflare
+CF-RAY: a37143efbe6faee9-AMS
+
