@@ -1,0 +1,52 @@
+{
+  "name": "@kertel/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./money": {
+      "kertel-source": "./src/money/index.ts",
+      "types": "./dist/money/index.d.ts",
+      "default": "./dist/money/index.js"
+    },
+    "./domain": {
+      "kertel-source": "./src/domain/index.ts",
+      "types": "./dist/domain/index.d.ts",
+      "default": "./dist/domain/index.js"
+    },
+    "./policy": {
+      "kertel-source": "./src/policy/index.ts",
+      "types": "./dist/policy/index.d.ts",
+      "default": "./dist/policy/index.js"
+    },
+    "./proposals": {
+      "kertel-source": "./src/proposals/index.ts",
+      "types": "./dist/proposals/index.d.ts",
+      "default": "./dist/proposals/index.js"
+    },
+    "./confirmation": {
+      "kertel-source": "./src/confirmation/index.ts",
+      "types": "./dist/confirmation/index.d.ts",
+      "default": "./dist/confirmation/index.js"
+    },
+    "./receipts": {
+      "kertel-source": "./src/receipts/index.ts",
+      "types": "./dist/receipts/index.d.ts",
+      "default": "./dist/receipts/index.js"
+    },
+    "./research": {
+      "kertel-source": "./src/research/index.ts",
+      "types": "./dist/research/index.d.ts",
+      "default": "./dist/research/index.js"
+    },
+    "./mandates": {
+      "kertel-source": "./src/mandates/index.ts",
+      "types": "./dist/mandates/index.d.ts",
+      "default": "./dist/mandates/index.js"
+    }
+  },
+  "$comment": "This package has no dependencies and must keep none. It is the deterministic core: no network, no filesystem, no clock, no OpenClaw, no Binance, no model. Its second consumer is scripts/prove.ts, which runs the same policy, proposal and confirmation functions the live plugin runs.",
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}
