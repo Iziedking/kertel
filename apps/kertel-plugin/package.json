@@ -23,6 +23,7 @@
     "zod": "3.25.76"
   },
   "bin": {
-    "kertel-mcp": "./dist/mcp.js"
+    "kertel-mcp": "./dist/mcp.js",
+    "kertel-daemon": "./dist/daemon.js"
   }
 }
