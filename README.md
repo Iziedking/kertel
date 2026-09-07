@@ -135,7 +135,7 @@ Steps 5 and 6 exist because a proposal is hashed when shown and re-hashed when c
 
 ## Futures
 
-`kertel_futures_propose`, `kertel_futures_confirm`, `kertel_futures_close` and `kertel_futures_positions` follow the same propose-then-confirm spine as spot. What differs is what has to be true before a code is issued, because a futures position can lose more than it cost.
+`kertel_futures_open`, `kertel_futures_confirm`, `kertel_futures_close` and `kertel_futures_positions` follow the same propose-then-confirm spine as spot. What differs is what has to be true before a code is issued, because a futures position can lose more than it cost.
 
 Binance ships ETHUSDT at **20x on cross margin**, where the entire futures wallet backs the position and a 5% move is the whole margin. Read from the live account:
 

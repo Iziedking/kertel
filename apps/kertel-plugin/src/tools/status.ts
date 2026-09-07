@@ -93,6 +93,19 @@ export function statusTool(runtime: Runtime): AgentTool {
       lines.push(`  Max slippage:    ${String(config.policy.trading.maxSlippageBps)} bps`);
       lines.push("");
 
+      // Futures needs its own two lines because the spot ones do not bound it:
+      // leverage means a small margin controls a large position.
+      lines.push("Futures limits");
+      if (runtime.futures === null) {
+        lines.push("  Unavailable. Futures runs on the Agent OS rail only.");
+      } else {
+        lines.push(`  Max leverage:    ${String(config.maxLeverage)}x, isolated margin always`);
+        lines.push(
+          `  Max position:    ${fp.format(config.maxFuturesNotional)} (on the position, not the margin behind it)`,
+        );
+      }
+      lines.push("");
+
       lines.push("Safety");
       if (safety.killSwitchEngaged) {
         lines.push(`  KILL SWITCH ENGAGED: ${safety.killSwitchReason ?? "no reason recorded"}`);
