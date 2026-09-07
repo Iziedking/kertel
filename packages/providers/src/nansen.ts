@@ -25,7 +25,7 @@
  * that instead of reporting an absence as calm.
  */
 
-import { ok } from "@kertel/core/domain";
+import { ok, refuse } from "@kertel/core/domain";
 import type { Refusal, Result } from "@kertel/core/domain";
 import type { PaidRequest } from "@kertel/x402";
 
@@ -78,6 +78,14 @@ export const nansenNetflowAdapter: ProviderAdapter = {
   paid: true,
 
   buildRequest(context: AdapterContext): Result<PaidRequest, Refusal> {
+    const chain = context.instrument.nansenChain;
+    if (chain === null || context.instrument.nansenTokenAddresses.length === 0) {
+      return refuse(
+        "PROVIDER_UNAVAILABLE",
+        `Kertel has no verified chain and contract for ${context.instrument.symbol}, so it cannot tell this token's flows from another with the same ticker.`,
+        { provider: "nansen", symbol: context.instrument.symbol },
+      );
+    }
     return ok({
       providerId: "nansen",
       endpointId: "nansen:smart-money/netflow",
@@ -85,7 +93,7 @@ export const nansenNetflowAdapter: ProviderAdapter = {
       method: "POST",
       timeoutMs: TIMEOUT_MS,
       body: {
-        chains: [context.instrument.nansenChain],
+        chains: [chain],
         filters: {
           // ETH is native on its own chain, so excluding native tokens would
           // exclude half of what Kertel is allowed to research.
@@ -110,6 +118,9 @@ export const nansenNetflowAdapter: ProviderAdapter = {
     }
 
     const instrument = context.instrument;
+    if (instrument.nansenChain === null) {
+      return null;
+    }
     const row = rows.find(
       (candidate): candidate is NetflowRow =>
         typeof candidate === "object" &&

@@ -18,7 +18,7 @@
  * outright.
  */
 
-import { ok } from "@kertel/core/domain";
+import { ok, refuse } from "@kertel/core/domain";
 import type { Refusal, Result } from "@kertel/core/domain";
 import type { PaidRequest } from "@kertel/x402";
 
@@ -35,8 +35,16 @@ export const coingeckoPriceAdapter: ProviderAdapter = {
   paid: true,
 
   buildRequest(context: AdapterContext): Result<PaidRequest, Refusal> {
+    const coinId = context.instrument.coingeckoId;
+    if (coinId === null) {
+      return refuse(
+        "PROVIDER_UNAVAILABLE",
+        `No verified CoinGecko id for ${context.instrument.symbol}, so Kertel will not guess one and buy a price for the wrong asset.`,
+        { provider: "coingecko", symbol: context.instrument.symbol },
+      );
+    }
     const url = new URL(ENDPOINT);
-    url.searchParams.set("ids", context.instrument.coingeckoId);
+    url.searchParams.set("ids", coinId);
     url.searchParams.set("vs_currencies", "usd");
     url.searchParams.set("include_24hr_change", "true");
     url.searchParams.set("include_last_updated_at", "true");
@@ -56,7 +64,11 @@ export const coingeckoPriceAdapter: ProviderAdapter = {
 
     // Keyed by the coin id that was asked for. Reading whatever single key came
     // back instead would hand an upstream mix-up straight into a price.
-    const entry = (body as Record<string, unknown>)[context.instrument.coingeckoId];
+    const coinId = context.instrument.coingeckoId;
+    if (coinId === null) {
+      return null;
+    }
+    const entry = (body as Record<string, unknown>)[coinId];
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
       return null;
     }

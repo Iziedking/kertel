@@ -31,7 +31,7 @@
  * and pin the shape down to the one that actually arrived.
  */
 
-import { ok } from "@kertel/core/domain";
+import { ok, refuse } from "@kertel/core/domain";
 import type { Refusal, Result } from "@kertel/core/domain";
 import type { PaidRequest } from "@kertel/x402";
 
@@ -78,8 +78,16 @@ export const coinmarketcapPriceAdapter: ProviderAdapter = {
   paid: true,
 
   buildRequest(context: AdapterContext): Result<PaidRequest, Refusal> {
+    const id = context.instrument.coinmarketcapId;
+    if (id === null) {
+      return refuse(
+        "PROVIDER_UNAVAILABLE",
+        `No verified CoinMarketCap id for ${context.instrument.symbol}. A ticker is ambiguous there, so Kertel will not guess one.`,
+        { provider: "coinmarketcap", symbol: context.instrument.symbol },
+      );
+    }
     const url = new URL(ENDPOINT);
-    url.searchParams.set("id", String(context.instrument.coinmarketcapId));
+    url.searchParams.set("id", String(id));
     url.searchParams.set("convert", "USD");
     return ok({
       providerId: "coinmarketcap",
@@ -105,6 +113,9 @@ export const coinmarketcapPriceAdapter: ProviderAdapter = {
     }
 
     const id = context.instrument.coinmarketcapId;
+    if (id === null) {
+      return null;
+    }
     const asset = assetFrom(envelope.data, String(id));
     if (asset === null) {
       return null;

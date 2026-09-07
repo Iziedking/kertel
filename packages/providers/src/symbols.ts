@@ -1,17 +1,21 @@
 /**
- * The closed table of instruments Kertel knows how to research.
+ * How each paid provider names an asset Binance calls `ETHUSDT`.
  *
- * Each provider names the same asset differently: Binance says `ETHUSDT`,
- * CoinGecko says `ethereum`, CoinMarketCap says `ETH`, Nansen answers in token
- * contracts on a named chain. Deriving those from each other — lowercasing a
- * symbol, stripping `USDT`, guessing a contract — is how a request ends up
- * pointed at the wrong asset, and every one of those calls costs money and then
- * gets priced into an order.
+ * CoinGecko says `ethereum`, CoinMarketCap says `1027`, Nansen answers in token
+ * contracts on a named chain. Deriving those from a ticker — lowercasing it,
+ * stripping `USDT`, guessing a contract — is how a request ends up pointed at
+ * the wrong asset, and every one of those calls costs money and then gets
+ * priced into an order. So the mapping is written down and checked by hand.
  *
- * So there is no derivation. An instrument Kertel can research is one somebody
- * wrote down here, with the ids checked by hand. A symbol that is not in this
- * table cannot be researched at all, which is the same answer the policy engine
- * gives for a symbol outside `allowedSymbols`, arrived at independently.
+ * **This table does not decide what Kertel can trade.** Binance's own
+ * `exchangeInfo` decides that, and it is authoritative: asking the exchange
+ * whether a symbol is real involves no guesswork at all. A symbol missing from
+ * this table is still tradeable; it simply cannot be corroborated by a paid
+ * source, so research falls back to what Binance itself publishes and the
+ * receipt says which sources were unavailable and why.
+ *
+ * That split matters. Confusing "Kertel has no CoinGecko id for this" with
+ * "Kertel cannot trade this" is what limited it to two symbols.
  */
 
 import type { Symbol_ } from "@kertel/core/domain";
@@ -20,8 +24,8 @@ export type InstrumentIds = {
   readonly symbol: Symbol_;
   readonly baseAsset: string;
   readonly quoteAsset: string;
-  /** CoinGecko coin id, from its `/coins/list`. Not the ticker. */
-  readonly coingeckoId: string;
+  /** CoinGecko coin id, from its `/coins/list`. Null when unmapped. */
+  readonly coingeckoId: string | null;
   /**
    * CoinMarketCap's numeric id, used as the `id` query parameter.
    *
@@ -30,11 +34,11 @@ export type InstrumentIds = {
    * The answer comes back keyed by this id, so there is nothing to disambiguate
    * on the way back either.
    */
-  readonly coinmarketcapId: number;
+  readonly coinmarketcapId: number | null;
   /** CoinMarketCap ticker. Cross-checked against the payload, never the key. */
-  readonly coinmarketcapSymbol: string;
+  readonly coinmarketcapSymbol: string | null;
   /** The chain Nansen tracks this asset's flows on. */
-  readonly nansenChain: string;
+  readonly nansenChain: string | null;
   /**
    * Contracts that count as this asset in a Nansen netflow row, lowercased.
    *
@@ -83,6 +87,33 @@ export function instrumentFor(symbol: Symbol_): InstrumentIds | undefined {
   return INSTRUMENTS.find((entry) => entry.symbol === symbol);
 }
 
-export function isResearchable(symbol: Symbol_): boolean {
+/** Whether any paid provider can be asked about this symbol. */
+export function hasPaidCoverage(symbol: Symbol_): boolean {
   return instrumentFor(symbol) !== undefined;
+}
+
+/**
+ * An instrument for a symbol nobody mapped.
+ *
+ * Built from what Binance itself reports, so the free venue tier works for any
+ * listed pair. Every paid provider id is null, and each of those adapters
+ * refuses by name rather than guessing an id — which is what turns "unmapped"
+ * into a line on the receipt instead of a failure.
+ */
+export function unmappedInstrument(input: {
+  readonly symbol: Symbol_;
+  readonly baseAsset: string;
+  readonly quoteAsset: string;
+}): InstrumentIds {
+  return {
+    symbol: input.symbol,
+    baseAsset: input.baseAsset,
+    quoteAsset: input.quoteAsset,
+    coingeckoId: null,
+    coinmarketcapId: null,
+    coinmarketcapSymbol: null,
+    nansenChain: null,
+    nansenTokenAddresses: [],
+    nansenTokenSymbols: [],
+  };
 }
