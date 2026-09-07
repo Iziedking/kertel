@@ -21,6 +21,7 @@
 import { z } from "zod";
 
 import * as fp from "@kertel/core/money";
+import type { FixedPoint } from "@kertel/core/money";
 import { seconds } from "@kertel/core/domain";
 import type { RunMode, Symbol_ } from "@kertel/core/domain";
 import { defaultPolicy, validatePolicy } from "@kertel/core/policy";
@@ -93,6 +94,17 @@ export type KertelConfig = {
   /** Null means market data only: Kertel can price, but cannot see the account or trade. */
   readonly binanceApiKey: string | null;
   readonly binanceApiSecret: string | null;
+  /**
+   * Ceiling on futures leverage. Binance defaults to 20x, where an ordinary
+   * day's move is the whole margin, so Kertel caps it well below that.
+   */
+  readonly maxLeverage: number;
+  /**
+   * Ceiling on a futures *position*, not on the margin behind it. Leverage means
+   * a small margin controls a large position, so the spot per-trade cap does
+   * not bound this risk.
+   */
+  readonly maxFuturesNotional: FixedPoint;
   readonly model: string | null;
   /**
    * Reasons a pillar is unavailable, in the operator's words.
@@ -219,6 +231,21 @@ export function loadConfig(env: Env): KertelConfig {
     );
   }
 
+  const maxLeverageRaw = parseOr("KERTEL_MAX_LEVERAGE", present(env["KERTEL_MAX_LEVERAGE"]), integer) as
+    | string
+    | null;
+  const maxLeverage = maxLeverageRaw === null ? 3 : Number(maxLeverageRaw);
+  if (maxLeverage < 1 || maxLeverage > 20) {
+    throw new ConfigError(
+      `KERTEL_MAX_LEVERAGE must be between 1 and 20. Got ${String(maxLeverage)}. Above 20x an ordinary day's move is more than the whole margin.`,
+    );
+  }
+  const maxFuturesRaw = parseOr(
+    "KERTEL_MAX_FUTURES_NOTIONAL",
+    present(env["KERTEL_MAX_FUTURES_NOTIONAL"]),
+    decimal,
+  ) as string | null;
+
   const base = defaultPolicy();
 
   const allowedSymbols = parseOr("KERTEL_ALLOWED_SYMBOLS", present(env["KERTEL_ALLOWED_SYMBOLS"]), symbols) as
@@ -329,6 +356,8 @@ export function loadConfig(env: Env): KertelConfig {
     binanceMcpToken: present(env["KERTEL_BINANCE_MCP_TOKEN"]),
     binanceApiKey: binanceKey,
     binanceApiSecret: binanceSecret,
+    maxLeverage,
+    maxFuturesNotional: fp.parse(maxFuturesRaw ?? "50.00"),
     model: present(env["KERTEL_MODEL"]),
     degraded,
   };

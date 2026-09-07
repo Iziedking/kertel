@@ -21,7 +21,8 @@
     "check": "npm run typecheck && npm run test",
     "prove": "tsx scripts/prove.ts",
     "probe:providers": "tsx scripts/probe-providers.ts",
-    "probe:adapters": "tsx scripts/probe-adapters.ts"
+    "probe:adapters": "tsx scripts/probe-adapters.ts",
+    "probe:futures": "tsx scripts/probe-futures.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.0",

@@ -42,7 +42,16 @@ import {
 } from "@kertel/providers";
 
 import { createBinanceClient } from "./infra/binance.js";
-import { createAgentOsClient } from "./infra/agentos.js";
+import { createAgentOs } from "./infra/agentos.js";
+import { createFuturesClient } from "./infra/futures.js";
+import type { FuturesClient } from "./infra/futures.js";
+import {
+  closeFutures,
+  confirmFutures,
+  describeFutures,
+  proposeFutures,
+} from "./futures-trading.js";
+import type { FuturesDeps, FuturesOutcome } from "./futures-trading.js";
 import { loadFixtureExchanges } from "./infra/fixtures.js";
 import type { BinanceClient } from "./infra/binance.js";
 import { cancel, confirm, propose, reconcile } from "./trading.js";
@@ -77,6 +86,17 @@ export type Runtime = {
   readonly binance: BinanceClient;
   /** Which rail orders go out on. Shown in the status report. */
   readonly executionRail: "agent-os" | "api-key" | "none";
+  /** Null when futures is unavailable, which is any rail other than Agent OS. */
+  readonly futures: FuturesClient | null;
+  proposeFutures(input: {
+    readonly symbol: string;
+    readonly side: "BUY" | "SELL";
+    readonly notional: string;
+    readonly leverage: number;
+  }): Promise<FuturesOutcome>;
+  confirmFutures(code: string): Promise<FuturesOutcome>;
+  closeFutures(symbol: string, fractionBps: number): Promise<FuturesOutcome>;
+  describeFutures(symbols: readonly string[]): Promise<string>;
   research(input: ResearchRequest): Promise<ResearchResult>;
   propose(input: {
     readonly symbol: string;
@@ -128,6 +148,7 @@ export type RuntimeOptions = {
   readonly fetchImpl?: typeof globalThis.fetch;
   /** Injected in tests so no order ever leaves the machine. */
   readonly binance?: BinanceClient;
+  readonly futures?: FuturesClient | null;
   readonly random?: (count: number) => Uint8Array;
   readonly newId?: (prefix: string) => string;
 };
@@ -199,14 +220,25 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const executionRail: "agent-os" | "api-key" | "none" =
     config.binanceMcpToken !== null ? "agent-os" : config.binanceApiKey !== null ? "api-key" : "none";
 
-  const binance =
-    options.binance ??
-    (executionRail === "agent-os"
-      ? createAgentOsClient({
+  // One authenticated session serves both products. Futures is only reachable
+  // through Agent OS: the REST fallback would need its own signed futures
+  // endpoints, and half a futures client is worse than none.
+  const agentOs =
+    executionRail === "agent-os"
+      ? createAgentOs({
           token: config.binanceMcpToken as string,
           url: config.binanceMcpUrl,
           ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
         })
+      : null;
+
+  const futures: FuturesClient | null =
+    options.futures ?? (agentOs === null ? null : createFuturesClient(agentOs.call));
+
+  const binance =
+    options.binance ??
+    (agentOs !== null
+      ? agentOs.spot
       : createBinanceClient({
           apiKey: config.binanceApiKey ?? undefined,
           apiSecret: config.binanceApiSecret ?? undefined,
@@ -269,6 +301,29 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   };
 
   const reviewDeps: ReviewDeps = { store, now: () => clock.now() };
+
+  const futuresDeps: FuturesDeps | null =
+    futures === null
+      ? null
+      : {
+          futures,
+          store,
+          hash: sha256,
+          random: tradingDeps.random,
+          now: () => clock.now(),
+          ownerHash: ownerHash as SenderIdHash | null,
+          mode: config.mode,
+          liveExecutionEnabled: config.policy.trading.liveExecutionEnabled,
+          maxLeverage: config.maxLeverage,
+          maxNotional: config.maxFuturesNotional,
+          newId: tradingDeps.newId,
+        };
+
+  const noFutures: FuturesOutcome = {
+    ok: false,
+    refusalCode: "EXECUTION_ADAPTER_UNAVAILABLE",
+    body: "Futures needs a Binance Agent OS token. Set KERTEL_BINANCE_MCP_TOKEN; an API key alone reaches Spot only.",
+  };
 
   const portableDeps: PortableDeps = {
     store,
@@ -483,7 +538,18 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     log,
     x402,
     binance,
+    futures,
     executionRail,
+    proposeFutures: async (input) =>
+      futuresDeps === null ? noFutures : proposeFutures(futuresDeps, input),
+    confirmFutures: async (code) =>
+      futuresDeps === null ? noFutures : confirmFutures(futuresDeps, code),
+    closeFutures: async (symbol, fractionBps) =>
+      futuresDeps === null ? noFutures : closeFutures(futuresDeps, { symbol, fractionBps }),
+    describeFutures: async (symbols) =>
+      futuresDeps === null
+        ? noFutures.body
+        : describeFutures(futuresDeps, symbols),
     mode: config.mode,
     ownerHash,
     research,

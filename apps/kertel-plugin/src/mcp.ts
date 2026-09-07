@@ -75,6 +75,9 @@ export function buildServer(runtime: Runtime): McpServer {
         "- kertel_propose prices an order and returns a one-use code. It does not place anything.",
         "- kertel_confirm places the order. It is irreversible. Only ever pass a code the human typed.",
         "  Never invent, complete, guess or reuse a code.",
+        "- Futures (kertel_futures_*) is leveraged and can lose more than the margin. The same code",
+        "  discipline applies. Kertel forces isolated margin and caps leverage; do not argue with either.",
+        "  Report the liquidation distance whenever you report a futures position.",
         "",
         "When Kertel refuses, the refusal is the answer. Report it and its reason; do not work around it,",
         "retry it with different numbers, or reach for another tool to do the same thing.",
@@ -503,6 +506,99 @@ export function buildServer(runtime: Runtime): McpServer {
         const result = await runtime.restore(body);
         return text(result.body, !result.ok);
       }),
+  );
+
+  // ---- Futures. Leveraged, so every guard is tighter. -----------------------
+
+  server.registerTool(
+    "kertel_futures_open",
+    {
+      title: "Kertel open futures position",
+      description:
+        "Price a USDⓈ-M futures position and return a one-use code. Does NOT open anything. " +
+        "Kertel forces ISOLATED margin and caps leverage, because Binance defaults to 20x on cross, " +
+        "where an ordinary day's move is the whole margin and the entire wallet backs the position. " +
+        "The amount is the POSITION notional, not the margin: at 3x, a 30 USDT position needs about " +
+        "10 USDT of margin. Binance's futures minimum is 20 USDT of position on most pairs. " +
+        "The proposal shows where the exchange would liquidate you.",
+      inputSchema: {
+        symbol: z.string().describe("Futures symbol, uppercase, for example ETHUSDT."),
+        side: z.enum(["BUY", "SELL"]).describe("BUY opens a long, SELL opens a short."),
+        notional: z.string().describe('Position size in quote currency, e.g. "30".'),
+        leverage: z
+          .number()
+          .int()
+          .min(1)
+          .default(3)
+          .describe("Whole number. Kertel refuses anything above its configured ceiling."),
+      },
+    },
+    async ({ symbol, side, notional, leverage }) =>
+      guard(async () => {
+        const result = await runtime.proposeFutures({ symbol, side, notional, leverage });
+        return text(result.body, !result.ok);
+      }),
+  );
+
+  server.registerTool(
+    "kertel_futures_confirm",
+    {
+      title: "Kertel confirm futures position",
+      description:
+        "Open the futures position the human approved, using the exact code. " +
+        "THIS OPENS A LEVERAGED POSITION THAT CAN LOSE MORE THAN THE MARGIN AND CANNOT BE UNDONE. " +
+        "Only ever pass a code the human typed. Never invent, complete, guess or reuse one.",
+      inputSchema: { code: z.string().describe("The code from the futures proposal.") },
+    },
+    async ({ code }) =>
+      guard(async () => {
+        const result = await runtime.confirmFutures(code);
+        return text(result.body, !result.ok);
+      }),
+  );
+
+  server.registerTool(
+    "kertel_futures_close",
+    {
+      title: "Kertel close futures position",
+      description:
+        "Close an open futures position, in full or in part, with a reduce-only order so a repeat " +
+        "cannot flip it instead of closing it. No confirmation code: getting OUT is the safe " +
+        "direction, and a code between a human and an exit costs money exactly when it matters.",
+      inputSchema: {
+        symbol: z.string(),
+        fractionBps: z
+          .number()
+          .int()
+          .min(1)
+          .max(10000)
+          .default(10000)
+          .describe("10000 closes all of it, 5000 closes half."),
+      },
+    },
+    async ({ symbol, fractionBps }) =>
+      guard(async () => {
+        const result = await runtime.closeFutures(symbol, fractionBps);
+        return text(result.body, !result.ok);
+      }),
+  );
+
+  server.registerTool(
+    "kertel_futures_positions",
+    {
+      title: "Kertel futures positions",
+      description:
+        "Open futures positions with entry, mark, unrealised PnL, leverage, margin mode, and HOW FAR " +
+        "THE PRICE IS FROM LIQUIDATION. Warns when liquidation sits inside an ordinary day's range, " +
+        "or when a position is on cross margin.",
+      inputSchema: {
+        symbols: z
+          .array(z.string())
+          .default(["ETHUSDT", "BTCUSDT"])
+          .describe("Which symbols to check. Futures has no cheap list-all."),
+      },
+    },
+    async ({ symbols }) => guard(async () => text(await runtime.describeFutures(symbols))),
   );
 
   return server;
