@@ -1,0 +1,14 @@
+{
+  "id": "kertel",
+  "name": "Kertel",
+  "description": "Evidence-driven crypto trading agent. Researches first, proposes second, executes only after an exact one-use confirmation code, then verifies.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "uiHints": {
+    "$comment": "Kertel is configured entirely through environment variables, not through plugin config. Secrets do not belong in openclaw.json: it is world-readable to anything that can read the config directory, it is the file people paste into issues, and a private key in it would be backed up with it. See .env.example for the full contract."
+  }
+}
