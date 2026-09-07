@@ -130,6 +130,25 @@ export function evaluateSymbol(input: {
   if (normalized === "") {
     return refuse("COMMAND_NOT_UNDERSTOOD", "No symbol was given.");
   }
+  // `*` opens the gate to anything the exchange lists. That is not a loosening
+  // of safety: Binance's own exchangeInfo is checked before any order is sized,
+  // and it is authoritative in a way a hand-written list can never be. What the
+  // list is genuinely for is *narrowing* — an operator who wants this account to
+  // touch two pairs and nothing else.
+  //
+  // The caps do not move either way. An unknown symbol is still bounded by the
+  // per-trade notional, the balance check and the exchange's own filters.
+  if (input.policy.trading.allowedSymbols.includes("*" as Symbol_)) {
+    if (!/^[A-Z0-9]{5,20}$/.test(normalized)) {
+      return refuse(
+        "SYMBOL_NOT_ALLOWED",
+        `${JSON.stringify(input.symbol)} is not shaped like a Binance symbol.`,
+        { requested: normalized },
+      );
+    }
+    return ok(normalized as Symbol_);
+  }
+
   const allowed = input.policy.trading.allowedSymbols.find((candidate) => candidate === normalized);
   if (allowed === undefined) {
     return refuse("SYMBOL_NOT_ALLOWED", `${normalized} is not on your allowed list.`, {

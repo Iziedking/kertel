@@ -213,6 +213,15 @@ export function renderResearchReceipt(
     lines.push("");
   }
 
+  // A price nothing corroborates is the single most important thing on this
+  // receipt, and it was previously only in a field nobody printed.
+  if (input.because.startsWith("UNCORROBORATED")) {
+    lines.push("WARNING: only the exchange's own price is available for this");
+    lines.push("symbol. No independent source exists to check it against, so");
+    lines.push("nothing here rules out a bad print or a thin market.");
+    lines.push("");
+  }
+
   if (input.limitedByBudget) {
     lines.push("Note: the research budget stopped this run early, so the");
     lines.push("conclusion rests on price alone.");

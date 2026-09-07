@@ -75,6 +75,17 @@ export type PlannerState = {
   readonly spentThisRun: FixedPoint;
   readonly spentToday: FixedPoint;
   readonly walletConfigured: boolean;
+  /**
+   * True when no paid provider has a verified id for this symbol.
+   *
+   * There is a difference between "Kertel could not get a second price" and "no
+   * second price exists to get". The first is a failure worth refusing over; the
+   * second is a permanent property of the symbol, and refusing forever would
+   * mean Kertel can only ever trade the handful of pairs somebody wrote down.
+   * The run proceeds on the venue's own price and the receipt says, loudly, that
+   * nothing corroborates it.
+   */
+  readonly allowSingleSource?: boolean;
   /** Providers known to be down. Skipped without spending an attempt. */
   readonly unhealthyProviders: readonly ProviderId[];
   readonly now: Instant;
@@ -314,6 +325,22 @@ export function decideNextStep(state: PlannerState): PlannerDecision {
         kind: "call",
         step,
         because: "Buying one independent price so the number behind any order is not a single venue's opinion.",
+      };
+    }
+
+    // No paid source can ever cover this symbol. Proceed, and say so.
+    if (state.allowSingleSource === true) {
+      for (const id of TIER_ONE_PRICES) {
+        reasons.set(id, "no verified id for this symbol, so no independent price can be bought");
+      }
+      reasons.set(NANSEN_FLOW, "no verified contract for this symbol");
+      reasons.set(GRAPH_POOL, "no published subgraph covers this symbol");
+      return {
+        kind: "sufficient",
+        because:
+          "UNCORROBORATED: only the exchange's own price is available for this symbol, and no independent source can be bought to check it.",
+        skipped: skippedFrom(state, reasons),
+        limitedByBudget: false,
       };
     }
 
