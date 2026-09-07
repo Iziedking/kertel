@@ -59,7 +59,18 @@ export function statusTool(runtime: Runtime): AgentTool {
       lines.push("Capabilities");
       lines.push(`  Free venue price (Binance public):  ready`);
       lines.push(`  Paid research over x402:            ${tick(x402.walletConfigured)}`);
-      lines.push(`  Live order execution:               ${tick(config.policy.trading.liveExecutionEnabled && config.mode === "live")}`);
+      lines.push(
+        `  Live order execution:               ${tick(config.policy.trading.liveExecutionEnabled && config.mode === "live")}`,
+      );
+      lines.push(
+        `  Execution rail:                     ${
+          runtime.executionRail === "agent-os"
+            ? "Binance Agent OS (Agentic sub-account, no withdrawal scope)"
+            : runtime.executionRail === "api-key"
+              ? "Binance REST with an API key"
+              : "none configured"
+        }`,
+      );
       lines.push("");
 
       lines.push("Research payments");

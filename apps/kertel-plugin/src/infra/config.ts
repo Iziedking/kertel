@@ -72,6 +72,13 @@ export type KertelConfig = {
   /** Null means no research wallet, so every paid call refuses early. */
   readonly x402PrivateKey: string | null;
   readonly binanceMcpUrl: string;
+  /**
+   * Bearer token for Binance Agent OS. Preferred over the API key when set.
+   *
+   * Thirty-day lifetime, no refresh grant. Orders placed with it land in the
+   * Agentic sub-account, which has no withdrawal scope at all.
+   */
+  readonly binanceMcpToken: string | null;
   /** Null means market data only: Kertel can price, but cannot see the account or trade. */
   readonly binanceApiKey: string | null;
   readonly binanceApiSecret: string | null;
@@ -186,9 +193,10 @@ export function loadConfig(env: Env): KertelConfig {
   if (binanceSecret !== null && binanceKey === null) {
     throw new ConfigError("KERTEL_BINANCE_API_SECRET is set but KERTEL_BINANCE_API_KEY is not.");
   }
-  if (binanceKey === null) {
+  const mcpToken = present(env["KERTEL_BINANCE_MCP_TOKEN"]);
+  if (binanceKey === null && mcpToken === null) {
     degraded.push(
-      "KERTEL_BINANCE_API_KEY is not set, so Kertel can read prices but cannot see the account or place an order.",
+      "Neither KERTEL_BINANCE_MCP_TOKEN nor KERTEL_BINANCE_API_KEY is set, so Kertel can read prices but cannot see the account or place an order.",
     );
   }
   if (binanceKey !== null && binanceKey === key) {
@@ -307,6 +315,7 @@ export function loadConfig(env: Env): KertelConfig {
     railPreference: railPreferenceOf(present(env["KERTEL_X402_RAIL"])),
     x402PrivateKey: key,
     binanceMcpUrl: present(env["KERTEL_BINANCE_MCP_URL"]) ?? "https://agent.binance.com/mcp/agentic",
+    binanceMcpToken: present(env["KERTEL_BINANCE_MCP_TOKEN"]),
     binanceApiKey: binanceKey,
     binanceApiSecret: binanceSecret,
     model: present(env["KERTEL_MODEL"]),

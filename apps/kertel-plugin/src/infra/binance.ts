@@ -1,14 +1,17 @@
 /**
  * The exchange. Free market data unsigned, orders HMAC-signed.
  *
- * **Why a key and secret rather than the Agent OS MCP server.** The MCP server
- * authorises over OAuth with a browser redirect to a localhost callback, and the
- * resulting credential lives in whichever MCP client completed the flow. A
- * long-running gateway cannot re-run a browser flow, and it cannot borrow the
- * credential from the client that did. A Binance API key can be created with
- * Spot trading enabled and withdrawals disabled, which is both the smallest
- * authority that can do the job and the same blast radius the OAuth credential
- * turned out to have.
+ * **This is the fallback rail.** Kertel prefers Binance Agent OS, in
+ * `agentos.ts`, because orders placed there land in the Agentic sub-account,
+ * which has no withdrawal scope to grant at all. This client exists for the
+ * case that rail cannot cover: the Agent OS token lasts thirty days and cannot
+ * refresh itself, so a machine whose token has lapsed and whose operator has
+ * not signed in again still needs a way to manage open positions.
+ *
+ * An API key created with Spot trading enabled and withdrawals disabled is the
+ * smallest authority that can do that job. Both clients implement the same
+ * interface and share the same parsers, so a user sees one vocabulary of
+ * refusals regardless of which rail carried the order.
  *
  * Three rules in here matter more than the rest.
  *
@@ -93,7 +96,7 @@ export function clientOrderIdFrom(idempotencyKey: string): string {
   return `kertel${cleaned.slice(0, 30)}`;
 }
 
-type FilterEntry = { readonly filterType?: unknown } & Record<string, unknown>;
+export type FilterEntry = { readonly filterType?: unknown } & Record<string, unknown>;
 
 function filterOf(filters: readonly FilterEntry[], type: string): FilterEntry | undefined {
   return filters.find((entry) => entry["filterType"] === type);
@@ -118,7 +121,7 @@ function decimalField(entry: FilterEntry | undefined, key: string): FixedPoint |
  * being guessed at — a wrong guess here tells the user to fix something that is
  * not the problem.
  */
-function refusalForCode(code: number, message: string): Refusal {
+export function refusalForCode(code: number, message: string): Refusal {
   switch (code) {
     case -2010:
     case -1013:
@@ -177,7 +180,7 @@ function statusFrom(raw: unknown): ExecutionStatus {
   }
 }
 
-type OrderResponse = {
+export type OrderResponse = {
   readonly orderId?: unknown;
   readonly clientOrderId?: unknown;
   readonly status?: unknown;
@@ -186,7 +189,7 @@ type OrderResponse = {
   readonly fills?: unknown;
 };
 
-function parseOrder(body: OrderResponse): PlacedOrder {
+export function parseOrder(body: OrderResponse): PlacedOrder {
   const executed = typeof body.executedQty === "string" ? fp.parse(body.executedQty) : fp.parse("0");
   const quote =
     typeof body.cummulativeQuoteQty === "string" ? fp.parse(body.cummulativeQuoteQty) : null;
@@ -221,6 +224,88 @@ function parseOrder(body: OrderResponse): PlacedOrder {
     averagePrice,
     feePaid,
     raw: body,
+  };
+}
+
+/** Turn an `exchangeInfo` payload into the filters the proposal gate needs. */
+export function parseExchangeInfo(
+  body: unknown,
+  symbol: Symbol_,
+): Result<SymbolFilters, Refusal> {
+  const symbols = (body as { symbols?: unknown }).symbols;
+  const entry = Array.isArray(symbols) ? symbols[0] : undefined;
+  if (typeof entry !== "object" || entry === null) {
+    return refuse("PROVIDER_UNAVAILABLE", `Binance published no trading rules for ${symbol}.`);
+  }
+  const record = entry as Record<string, unknown>;
+  if (record["status"] !== "TRADING") {
+    return refuse(
+      "SYMBOL_NOT_ALLOWED",
+      `${symbol} is not currently trading on Binance (status ${String(record["status"])}).`,
+    );
+  }
+
+  const list = Array.isArray(record["filters"]) ? (record["filters"] as FilterEntry[]) : [];
+  const price = filterOf(list, "PRICE_FILTER");
+  const lot = filterOf(list, "LOT_SIZE");
+  const marketLot = filterOf(list, "MARKET_LOT_SIZE");
+  const notional = filterOf(list, "NOTIONAL");
+
+  const tickSize = decimalField(price, "tickSize");
+  const stepSize = decimalField(lot, "stepSize");
+  const minQuantity = decimalField(lot, "minQty");
+  const maxQuantity = decimalField(lot, "maxQty");
+  const minNotional = decimalField(notional, "minNotional");
+  if (
+    tickSize === null ||
+    stepSize === null ||
+    minQuantity === null ||
+    maxQuantity === null ||
+    minNotional === null
+  ) {
+    return refuse(
+      "PROVIDER_UNAVAILABLE",
+      `Binance's trading rules for ${symbol} are missing a field Kertel needs to size an order safely.`,
+    );
+  }
+
+  const avgMinutes = notional?.["avgPriceMins"];
+  return ok({
+    symbol,
+    baseAsset: String(record["baseAsset"] ?? ""),
+    quoteAsset: String(record["quoteAsset"] ?? ""),
+    tickSize,
+    stepSize,
+    minQuantity,
+    maxQuantity,
+    minNotional,
+    marketMaxQuantity: decimalField(marketLot, "maxQty"),
+    notionalAveragePriceMinutes: typeof avgMinutes === "number" ? avgMinutes : 5,
+  });
+}
+
+/** Turn an account payload into balances, dropping anything unreadable. */
+export function parseAccount(body: unknown): AccountSnapshot {
+  const record = body as Record<string, unknown>;
+  const balances = Array.isArray(record["balances"]) ? record["balances"] : [];
+  return {
+    accountRef: String(record["uid"] ?? "binance-spot"),
+    canTradeSpot: record["canTrade"] === true,
+    observedAt: instant(Date.now()),
+    balances: balances.flatMap((entry) => {
+      if (typeof entry !== "object" || entry === null) return [];
+      const row = entry as Record<string, unknown>;
+      const free = row["free"];
+      const locked = row["locked"];
+      if (typeof row["asset"] !== "string" || typeof free !== "string") return [];
+      return [
+        {
+          asset: row["asset"],
+          free: fp.parse(free),
+          locked: typeof locked === "string" ? fp.parse(locked) : fp.parse("0"),
+        },
+      ];
+    }),
   };
 }
 

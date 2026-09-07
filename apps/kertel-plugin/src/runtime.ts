@@ -36,6 +36,7 @@ import type { FixtureExchange, X402Client } from "@kertel/x402";
 import { assertRegistryCoversRecipes, instrumentFor, makeStepExecutor } from "@kertel/providers";
 
 import { createBinanceClient } from "./infra/binance.js";
+import { createAgentOsClient } from "./infra/agentos.js";
 import { loadFixtureExchanges } from "./infra/fixtures.js";
 import type { BinanceClient } from "./infra/binance.js";
 import { cancel, confirm, propose, reconcile } from "./trading.js";
@@ -68,6 +69,8 @@ export type Runtime = {
   /** Hash of the configured owner, the form used in every stored record. */
   readonly ownerHash: string | null;
   readonly binance: BinanceClient;
+  /** Which rail orders go out on. Shown in the status report. */
+  readonly executionRail: "agent-os" | "api-key" | "none";
   research(input: ResearchRequest): Promise<ResearchResult>;
   propose(input: {
     readonly symbol: string;
@@ -183,13 +186,26 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const ownerHash =
     config.ownerWhatsApp === null ? null : hashSender(config.ownerWhatsApp, config.senderSalt);
 
+  // Agent OS first. Its orders land in the Agentic sub-account, which has no
+  // withdrawal scope to grant, and that is a stronger guarantee than an API key
+  // with the withdrawal box unticked. The API key remains the fallback for when
+  // the thirty-day token has lapsed and nobody has signed in again.
+  const executionRail: "agent-os" | "api-key" | "none" =
+    config.binanceMcpToken !== null ? "agent-os" : config.binanceApiKey !== null ? "api-key" : "none";
+
   const binance =
     options.binance ??
-    createBinanceClient({
-      apiKey: config.binanceApiKey ?? undefined,
-      apiSecret: config.binanceApiSecret ?? undefined,
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
-    });
+    (executionRail === "agent-os"
+      ? createAgentOsClient({
+          token: config.binanceMcpToken as string,
+          url: config.binanceMcpUrl,
+          ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+        })
+      : createBinanceClient({
+          apiKey: config.binanceApiKey ?? undefined,
+          apiSecret: config.binanceApiSecret ?? undefined,
+          ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+        }));
 
   const tradingDeps: TradingDeps = {
     policy: config.policy,
@@ -263,6 +279,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     rails: railsFor(config.railPreference).map((rail) => rail.id),
     walletConfigured: x402.walletConfigured,
     payer: x402.payerAddress,
+    executionRail,
     degraded: config.degraded,
   });
 
@@ -452,6 +469,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     log,
     x402,
     binance,
+    executionRail,
     mode: config.mode,
     ownerHash,
     research,
