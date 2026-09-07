@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/core"
+    },
+    {
+      "path": "./packages/x402"
+    },
+    {
+      "path": "./packages/providers"
+    },
+    {
+      "path": "./apps/kertel-plugin"
+    }
+  ]
+}

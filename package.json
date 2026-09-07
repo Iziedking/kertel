@@ -1,0 +1,32 @@
+{
+  "name": "kertel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Evidence-driven crypto trading agent operated from WhatsApp. Researches first, proposes second, executes only after exact confirmation, verifies every result.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "workspaces": [
+    "packages/core",
+    "packages/x402",
+    "packages/providers",
+    "apps/kertel-plugin"
+  ],
+  "scripts": {
+    "typecheck": "tsc --build --force",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test",
+    "prove": "tsx scripts/prove.ts",
+    "probe:providers": "tsx scripts/probe-providers.ts",
+    "probe:adapters": "tsx scripts/probe-adapters.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}
