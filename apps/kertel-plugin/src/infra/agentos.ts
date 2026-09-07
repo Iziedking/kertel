@@ -50,14 +50,14 @@ import type {
 
 import { parseAccount, parseExchangeInfo, parseOrder, refusalForCode } from "./binance.js";
 import type { BinanceClient, OrderResponse, PlacedOrder } from "./binance.js";
+import type { ToolCaller } from "./futures.js";
 
 const DEFAULT_URL = "https://agent.binance.com/mcp/agentic";
-/** The venue's five-minute average, which Agent OS exposes no tool for. Free and unauthenticated. */
-const AVG_PRICE_URL = "https://api.binance.com/api/v3/avgPrice";
 
 export type AgentOsConfig = {
   readonly token: string;
   readonly url?: string;
+  /** Unused: every read goes through the authenticated session. Kept for symmetry with the REST client. */
   readonly fetchImpl?: typeof globalThis.fetch;
 };
 
@@ -88,9 +88,18 @@ function refusalFromToolError(toolName: string, raw: string): Refusal {
   return refuse("EXCHANGE_REJECTED", `Agent OS rejected ${toolName}: ${raw.slice(0, 200)}`).error;
 }
 
+export type AgentOsHandle = {
+  readonly spot: BinanceClient;
+  /** The same authenticated session, for callers that speak other Binance products. */
+  readonly call: ToolCaller;
+};
+
 export function createAgentOsClient(config: AgentOsConfig): BinanceClient {
+  return createAgentOs(config).spot;
+}
+
+export function createAgentOs(config: AgentOsConfig): AgentOsHandle {
   const url = config.url ?? DEFAULT_URL;
-  const doFetch = config.fetchImpl ?? globalThis.fetch;
 
   let client: Client | null = null;
   let connecting: Promise<Client> | null = null;
@@ -151,6 +160,24 @@ export function createAgentOsClient(config: AgentOsConfig): BinanceClient {
         arguments: { toolName, arguments: args },
       })) as ToolResult;
     } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "";
+      // Binance's own error survives inside the MCP error text. An invalid
+      // symbol is the exchange answering, not the transport failing, and
+      // reporting it as unreachable sends the reader to check their network.
+      const embedded = /"code"\s*:\s*(-?\d+)/.exec(message);
+      if (embedded !== null && options.unknownOnFailure !== true) {
+        const code = Number(embedded[1]);
+        const detail = /"msg"\s*:\s*"([^"]*)"/.exec(message)?.[1] ?? message.slice(0, 160);
+        if (code === -1121 || /invalid symbol/i.test(detail)) {
+          return refuse(
+            "SYMBOL_NOT_ALLOWED",
+            `Binance does not list that symbol. Check the exact pair, for example ETHUSDT rather than ETH.`,
+            { code },
+          );
+        }
+        return { ok: false, error: refusalForCode(code, detail) };
+      }
+
       // The session may have died. Drop it so the next call redials.
       client = null;
       if (options.unknownOnFailure === true) {
@@ -182,7 +209,7 @@ export function createAgentOsClient(config: AgentOsConfig): BinanceClient {
     }
   }
 
-  return {
+  const spot: BinanceClient = {
     credentialed: true,
 
     async filters(symbol: Symbol_): Promise<Result<SymbolFilters, Refusal>> {
@@ -207,19 +234,15 @@ export function createAgentOsClient(config: AgentOsConfig): BinanceClient {
       // filter is evaluated against. The public endpoint is free and needs no
       // auth, so the correct number is used rather than a near one.
       let averagePrice: ReturnType<typeof fp.parse> | null = null;
-      try {
-        const response = await doFetch(`${AVG_PRICE_URL}?symbol=${symbol}`, {
-          headers: { accept: "application/json" },
-        });
-        if (response.ok) {
-          const body = (await response.json()) as { price?: unknown };
-          if (typeof body.price === "string" && /^\d+(\.\d+)?$/.test(body.price)) {
-            averagePrice = fp.parse(body.price);
-          }
+      const average = await call("spot.avgPrice", { symbol });
+      if (average.ok) {
+        const raw = (average.value as Record<string, unknown>)["price"];
+        if (typeof raw === "string" && /^\d+(\.\d+)?$/.test(raw)) {
+          averagePrice = fp.parse(raw);
         }
-      } catch {
-        // Survivable: the proposal gate falls back to the last price and says so.
       }
+      // A missing average is survivable: the proposal gate falls back to the
+      // last price and says which it used.
 
       const bestBid = fp.parse(bid);
       const bestAsk = fp.parse(ask);
@@ -271,4 +294,6 @@ export function createAgentOsClient(config: AgentOsConfig): BinanceClient {
       return ok(parseOrder(result.value as OrderResponse));
     },
   };
+
+  return { spot, call };
 }

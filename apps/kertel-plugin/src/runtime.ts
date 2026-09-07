@@ -29,11 +29,17 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { runPlan } from "@kertel/core/research";
 import type { PlannerState, ResearchGoal } from "@kertel/core/research";
+import { evaluateSymbol } from "@kertel/core/policy";
 import { renderRefusalReceipt, renderResearchReceipt } from "@kertel/core/receipts";
 import type { ReceiptPayment } from "@kertel/core/receipts";
 import { createFixtureX402Client, createLiveX402Client } from "@kertel/x402";
 import type { FixtureExchange, X402Client } from "@kertel/x402";
-import { assertRegistryCoversRecipes, instrumentFor, makeStepExecutor } from "@kertel/providers";
+import {
+  assertRegistryCoversRecipes,
+  instrumentFor,
+  makeStepExecutor,
+  unmappedInstrument,
+} from "@kertel/providers";
 
 import { createBinanceClient } from "./infra/binance.js";
 import { createAgentOsClient } from "./infra/agentos.js";
@@ -287,27 +293,34 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     const now: Instant = clock.now();
     const symbol = request.symbol.trim().toUpperCase() as Symbol_;
 
-    // Two independent checks, on purpose. The policy engine owns what Kertel is
-    // allowed to trade; the instrument table owns what Kertel knows how to ask
-    // about. A symbol has to clear both, and they can disagree — a symbol added
-    // to the policy but not the table is a configuration mistake, not a
-    // research failure, and the message says which.
-    if (!config.policy.trading.allowedSymbols.includes(symbol)) {
-      return refused(
-        "SYMBOL_NOT_ALLOWED",
-        `${symbol} is not on the allowed list. Kertel will research ${config.policy.trading.allowedSymbols.join(", ")}.`,
-        symbol,
-        now,
-      );
+    // One gate, not two. This used to compare against `allowedSymbols` inline,
+    // which quietly bypassed `evaluateSymbol` and every rule it enforces —
+    // including the wildcard. A second copy of a security check is a second
+    // place for it to drift.
+    const permitted = evaluateSymbol({ policy: config.policy, symbol });
+    if (!permitted.ok) {
+      return refused(permitted.error.code, permitted.error.detail, symbol, now);
     }
-    const instrument = instrumentFor(symbol);
+    // A symbol nobody mapped is still tradeable, and still researchable from
+    // what Binance itself publishes. Only the paid corroboration is missing, and
+    // each of those adapters refuses by name so the receipt says which and why.
+    let instrument = instrumentFor(symbol);
+    let unmapped = false;
     if (instrument === undefined) {
-      return refused(
-        "SYMBOL_NOT_ALLOWED",
-        `${symbol} is allowed by policy but Kertel has no verified provider ids for it, so it cannot research it without guessing.`,
+      unmapped = true;
+      const listing = await binance.filters(symbol);
+      if (!listing.ok) {
+        return refused(listing.error.code, listing.error.detail, symbol, now);
+      }
+      instrument = unmappedInstrument({
         symbol,
-        now,
-      );
+        baseAsset: listing.value.baseAsset,
+        quoteAsset: listing.value.quoteAsset,
+      });
+      log.info("researching an unmapped symbol", {
+        symbol,
+        note: "Binance data only; no paid provider has a verified id for it.",
+      });
     }
 
     const safety = store.safetyState();
@@ -343,6 +356,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       spentToday,
       walletConfigured: x402.walletConfigured,
       unhealthyProviders: [],
+      allowSingleSource: unmapped,
       now,
     };
 

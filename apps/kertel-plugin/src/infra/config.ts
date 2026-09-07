@@ -57,7 +57,18 @@ const symbols = z
   .string()
   .trim()
   .transform((raw) => raw.split(",").map((entry) => entry.trim()).filter((entry) => entry !== ""))
-  .pipe(z.array(z.string().regex(/^[A-Z0-9]{5,20}$/, "symbols are uppercase, for example ETHUSDT")).min(1));
+  .pipe(
+    z
+      .array(
+        z
+          .string()
+          .regex(
+            /^(\*|[A-Z0-9]{5,20})$/,
+            "symbols are uppercase, for example ETHUSDT, or * for anything Binance lists",
+          ),
+      )
+      .min(1),
+  );
 
 export type KertelConfig = {
   readonly mode: RunMode;
