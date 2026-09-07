@@ -20,6 +20,7 @@ process.loadEnvFile?.(".env");
 process.env["KERTEL_MODE"] = "fixture";
 process.env["KERTEL_LIVE_EXECUTION"] = "false";
 
+import * as fp from "@kertel/core/money";
 import { loadConfig } from "../apps/kertel-plugin/src/infra/config.js";
 import { createRuntime } from "../apps/kertel-plugin/src/runtime.js";
 
@@ -37,7 +38,7 @@ async function main(): Promise<void> {
 
   console.log("\n--- mark price, read independently of the position ---");
   const mark = await runtime.futures.markPrice("ETHUSDT" as never);
-  console.log(mark.ok ? `ETHUSDT mark ${JSON.stringify(mark.value)}` : `refused: ${mark.error.detail}`);
+  console.log(mark.ok ? `ETHUSDT mark ${fp.format(mark.value)}` : `refused: ${mark.error.detail}`);
 
   console.log("\n--- propose 30 USDT long at 3x (live prices, no order) ---");
   const proposal = await runtime.proposeFutures({

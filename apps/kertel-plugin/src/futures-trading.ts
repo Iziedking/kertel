@@ -482,7 +482,12 @@ export async function describeFutures(
     lines.push(
       funded.length === 0
         ? "  wallet: empty"
-        : `  wallet: ${funded.map((entry) => `${fp.format(entry.balance)} ${entry.asset}`).join(", ")}`,
+        : // Binance answers with eight decimals on every asset. Trailing zeros
+          // past the cents are the exchange's storage precision, not money, and
+          // showing them reads as false precision on a balance.
+          `  wallet: ${funded
+            .map((entry) => `${fp.format(fp.trim(entry.balance, 2))} ${entry.asset}`)
+            .join(", ")}`,
     );
   }
   lines.push("");
