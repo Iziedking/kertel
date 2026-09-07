@@ -1,6 +1,8 @@
 # Kertel
 
-A trading agent for Binance Spot that buys its own research, refuses what it cannot justify, and manages positions on its own once you approve a plan.
+A trading agent for **Binance Spot** that buys its own research, refuses what it cannot justify, and manages positions on its own once you approve a plan.
+
+Spot only, two symbols, market orders only. Every one of those is a deliberate limit rather than an unfinished edge, and `kertel_status` will tell you so on any machine you run it.
 
 It runs as an MCP server and trades through **Binance Agent OS**. Claude Code, Claude, Codex, ChatGPT and VS Code become the reasoning layer; Kertel is the part that handles money, and it is deterministic.
 
@@ -76,6 +78,27 @@ Approve one plan and Kertel runs it without asking again:
 Kertel's working state lives in a local database, so a fresh Claude Code session on another laptop would normally start blank and sit idle over a live position. `kertel_snapshot` emits that state as text you store in your own memory service. `kertel_restore` picks the positions back up mid-flight, including the high-water mark that a trailing stop depends on.
 
 Restore treats the snapshot as intent and the exchange as truth. A position you sold by hand since Tuesday comes back marked unfulfillable, not as something the monitor goes looking to sell.
+
+**It remembers, across machines and across sessions.**
+
+Kertel's working state lives in a local database, so a fresh session on another
+machine would start blank. [Agent Memory](https://agentsqa.xyz) closes that gap.
+It is a portable memory service ([`agent-memory-connect`](https://github.com/Iziedking/Agent-QA),
+by the same author as Kertel) that keeps a passphrase in the OS keychain and
+attaches identity headers through a local proxy, so no secret sits in a config
+file.
+
+The division of labour matters:
+
+- **Kertel owns the facts.** Every plan, every exit, every fill price, recorded
+  when it happens. Not a model's recollection of events; the events.
+- **Agent Memory owns the portability.** It carries a snapshot and a digest
+  between machines and between agents.
+- **Claude is the bridge.** It recalls at the start of a session, hands what it
+  found to `kertel_learn` and `kertel_restore`, and stores the result back.
+
+Kertel deliberately holds no memory credential of its own. Taking the passphrase
+would break the one property the connector exists to provide.
 
 **It keeps a record you can hold it to.**
 
@@ -166,6 +189,8 @@ Verified on 2026-09-07 against live endpoints.
 | The Graph pool data | Not wired. No subgraph chosen, and the receipt says so rather than implying onchain evidence. |
 | Daily loss and exposure caps | Not enforced yet. Both are passed as zero. The per-trade cap and balance check do apply. |
 | Limit orders | Modelled throughout, not wired. Market orders only. |
+| Futures, margin, convert | Not used. The Agent OS token carries those scopes; Kertel touches none of them. |
+| Symbols | ETHUSDT and BTCUSDT. Anything else is refused before a provider is called. |
 
 Getting an Agent OS token takes one browser sign-in. Connect the MCP server to any supported client, authorise, and copy the `accessToken` the client stored:
 
@@ -193,6 +218,26 @@ apps/kertel-plugin    the MCP server, the monitor, and durable state.
 `packages/core` takes its clock, hasher and network as arguments, which is why the entire policy, sizing, proposal and confirmation logic is tested without any of them. Fixture mode is not a separate code path; it is the same executor holding a different payment client, so a run with no wallet still exercises the merchant pins, the rail selection and the per-asset decimals.
 
 Money is never a float. The spend ledger stores integer atoms at micro-dollar scale and adds them in SQL as integers, with a test that adds a hundred cents and demands exactly one dollar.
+
+## Running it on a server
+
+A laptop only manages positions while it is on. `kertel-daemon` is the same
+runtime with no protocol attached: it opens the same database, starts the
+monitor, and stays up.
+
+```bash
+cp .env.example .env      # fill in the token and limits
+docker compose up -d
+docker compose logs -f
+```
+
+The first log line says whether it will actually trade, and the `degraded` array
+names anything missing. Every fifteen minutes it logs what it is managing, so a
+wedged daemon and a quiet market do not look the same.
+
+The daemon holds no port open and accepts no input. Talking to Kertel is the MCP
+server's job, and that is stdio only. `docs/DEPLOY.md` has the full setup,
+including reaching one database from both.
 
 ## Verify it yourself
 
