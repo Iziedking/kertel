@@ -27,11 +27,16 @@ import {
 } from "@kertel/core/confirmation";
 
 import type { BinanceClient } from "./infra/binance.js";
+import type { FuturesClient } from "./infra/futures.js";
+import { isFlat } from "./infra/futures.js";
+import { venueFor } from "./venue.js";
 import type { Store } from "./infra/store.js";
 
 export type PlanDeps = {
   readonly store: Store;
   readonly binance: BinanceClient;
+  /** Null when Kertel is not on the Agent OS rail, where futures lives. */
+  readonly futures: FuturesClient | null;
   readonly hash: (input: string) => string;
   readonly random: (count: number) => Uint8Array;
   readonly now: () => Instant;
@@ -64,6 +69,14 @@ export type PlanRequest = {
   /** Null means "what the position actually cost", read from the last fill. */
   readonly entryPrice: string | null;
   readonly holdDays: number;
+  /**
+   * Which venue holds the position.
+   *
+   * Null asks Kertel to work it out: an open futures position in this symbol
+   * means futures, anything else means spot. Holding both at once is the only
+   * ambiguous case, and there the caller has to say.
+   */
+  readonly market?: "spot" | "futures" | null;
 };
 
 /**
@@ -186,20 +199,15 @@ export async function planExit(deps: PlanDeps, request: PlanRequest): Promise<Pl
     );
   }
 
-  const [filtersResult, marketResult, accountResult] = await Promise.all([
-    deps.binance.filters(symbol),
-    deps.binance.market(symbol),
-    deps.binance.account(),
-  ]);
-  if (!filtersResult.ok) return fail(filtersResult.error);
-  if (!marketResult.ok) return fail(marketResult.error);
-  if (!accountResult.ok) return fail(accountResult.error);
+  // Which venue, and then one read that serves both.
+  const market_ = request.market ?? (await detectMarket(deps, symbol));
+  const venue = venueFor(market_, deps.binance, deps.futures);
+  if (!venue.ok) return fail(venue.error);
 
-  const filters = filtersResult.value;
-  const market = marketResult.value;
-  const held =
-    accountResult.value.balances.find((balance) => balance.asset === filters.baseAsset)?.free ??
-    fp.parse("0");
+  const readingResult = await venue.value.read(symbol);
+  if (!readingResult.ok) return fail(readingResult.error);
+  const reading = readingResult.value;
+  const held = reading.held;
 
   // Default to the whole position: a plan that silently covers part of what you
   // hold leaves the rest unprotected without saying so.
@@ -208,7 +216,9 @@ export async function planExit(deps: PlanDeps, request: PlanRequest): Promise<Pl
     return fail(
       refuse(
         "INSUFFICIENT_BALANCE",
-        `The account holds no ${filters.baseAsset}, so there is no position to plan an exit for.`,
+        market_ === "futures"
+          ? `There is no open ${symbol} futures position to plan an exit for.`
+          : `The account holds no ${reading.baseAsset}, so there is no position to plan an exit for.`,
       ).error,
     );
   }
@@ -216,7 +226,9 @@ export async function planExit(deps: PlanDeps, request: PlanRequest): Promise<Pl
     return fail(
       refuse(
         "INSUFFICIENT_BALANCE",
-        `The plan covers ${fp.format(quantity)} ${filters.baseAsset} but the account only holds ${fp.format(held)}.`,
+        `The plan covers ${fp.format(quantity)} ${reading.baseAsset} but ${
+        market_ === "futures" ? "the position is only" : "the account only holds"
+      } ${fp.format(held)}.`,
       ).error,
     );
   }
@@ -229,15 +241,19 @@ export async function planExit(deps: PlanDeps, request: PlanRequest): Promise<Pl
   const entryPrice =
     request.entryPrice !== null
       ? fp.parse(request.entryPrice)
-      : adopted !== null
-        ? fp.parse(adopted.entryPrice)
-        : market.bestBid;
+      : reading.entryPrice !== null
+        ? reading.entryPrice
+        : adopted !== null
+          ? fp.parse(adopted.entryPrice)
+          : reading.price;
   const entrySource =
     request.entryPrice !== null
       ? "as you stated it"
-      : adopted !== null
-        ? `from the position you took over via ${adopted.source}`
-        : "the current bid, which is only right for a position just opened";
+      : reading.entryPrice !== null
+        ? "the exchange's own entry price for the position"
+        : adopted !== null
+          ? `from the position you took over via ${adopted.source}`
+          : "the current bid, which is only right for a position just opened";
 
   const problems = validateMandate({
     ladder: request.ladder,
@@ -258,6 +274,7 @@ export async function planExit(deps: PlanDeps, request: PlanRequest): Promise<Pl
     id: `plan-${randomUUID()}` as MandateId,
     senderIdHash: deps.ownerHash,
     symbol,
+    market: market_,
     entryPrice,
     quantity,
     ladder: [...request.ladder].sort((a, b) => a.atBps - b.atBps),
@@ -298,9 +315,9 @@ export async function planExit(deps: PlanDeps, request: PlanRequest): Promise<Pl
     refusalCode: null,
     body: renderPlan(
       mandate,
-      filters.baseAsset,
-      filters.quoteAsset,
-      market.bestBid,
+      reading.baseAsset,
+      "USDT",
+      reading.price,
       code,
       deps.mode,
       deps.store.mandates.lessonsFor(symbol).slice(0, 3).map((lesson) => lesson.text),
@@ -530,4 +547,21 @@ export function describeJournal(deps: PlanDeps, limit: number, withEvidence: boo
     lines.push("");
   }
   return lines.join("\n").trimEnd();
+}
+
+/**
+ * Work out which venue a plan is about, when the caller did not say.
+ *
+ * An open futures position in the symbol is the signal, because it is the
+ * unambiguous one: futures positions are explicit things that exist or do not,
+ * whereas a spot balance can be dust left over from a sale. Holding both at
+ * once is the case this cannot resolve, and there the caller has to be explicit
+ * — but a plan defaulting to spot in that situation is the safe way to be
+ * wrong, since a spot plan can only ever sell coins that are really there.
+ */
+async function detectMarket(deps: PlanDeps, symbol: Symbol_): Promise<"spot" | "futures"> {
+  if (deps.futures === null) return "spot";
+  const position = await deps.futures.position(symbol);
+  if (!position.ok) return "spot";
+  return isFlat(position.value) ? "spot" : "futures";
 }

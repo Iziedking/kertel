@@ -34,6 +34,9 @@ import type { ExitMandate, MandateTrigger } from "@kertel/core/mandates";
 
 import { clientOrderIdFrom } from "./infra/binance.js";
 import type { BinanceClient } from "./infra/binance.js";
+import type { FuturesClient } from "./infra/futures.js";
+import { venueFor } from "./venue.js";
+import type { Venue } from "./venue.js";
 import type { Store } from "./infra/store.js";
 import type { Logger } from "./infra/logger.js";
 import { outcomeFrom } from "./review.js";
@@ -41,6 +44,8 @@ import { outcomeFrom } from "./review.js";
 export type MonitorDeps = {
   readonly store: Store;
   readonly binance: BinanceClient;
+  /** Null off the Agent OS rail. A futures mandate then halts rather than guessing. */
+  readonly futures: FuturesClient | null;
   readonly log: Logger;
   readonly now: () => Instant;
   readonly hash: (input: string) => string;
@@ -167,21 +172,26 @@ type Visit = { readonly text: string; readonly fired: boolean };
 async function visit(deps: MonitorDeps, mandate: ExitMandate, now: Instant): Promise<Visit> {
   const symbol = mandate.symbol;
 
-  const [filtersResult, marketResult, accountResult] = await Promise.all([
-    deps.binance.filters(symbol),
-    deps.binance.market(symbol),
-    deps.binance.account(),
-  ]);
+  // Spot or futures. The mandate says which, and everything below this line is
+  // identical either way — that is the point of the venue.
+  const venueResult = venueFor(mandate.market, deps.binance, deps.futures);
+  if (!venueResult.ok) {
+    deps.store.mandates.journal({
+      at: now,
+      kind: "checked",
+      symbol,
+      mandateId: mandate.id,
+      headline: `Could not check ${symbol}`,
+      detail: venueResult.error.detail,
+      evidence: null,
+    });
+    return { text: `${symbol}: could not check — ${venueResult.error.detail}`, fired: false };
+  }
+  const venue = venueResult.value;
 
-  if (!filtersResult.ok || !marketResult.ok || !accountResult.ok) {
-    const problem = !filtersResult.ok
-      ? filtersResult.error
-      : !marketResult.ok
-        ? marketResult.error
-        : accountResult.ok
-          ? null
-          : accountResult.error;
-    const detail = problem?.detail ?? "the exchange did not answer";
+  const readingResult = await venue.read(symbol);
+  if (!readingResult.ok) {
+    const detail = readingResult.error.detail;
     // Not a reason to act. A monitor that exits because it could not read the
     // price is a monitor that sells on a network blip.
     deps.store.mandates.journal({
@@ -196,29 +206,26 @@ async function visit(deps: MonitorDeps, mandate: ExitMandate, now: Instant): Pro
     return { text: `${symbol}: could not check — ${detail}`, fired: false };
   }
 
-  const filters = filtersResult.value;
-  const market = marketResult.value;
-  const held =
-    accountResult.value.balances.find((balance) => balance.asset === filters.baseAsset)?.free ??
-    fp.parse("0");
+  const reading = readingResult.value;
+  const held = reading.held;
 
   // How far it moved since the previous look. This is what separates a gap from
   // a drift, and it is the only reason the loop stores the last price.
   const previous = deps.store.mandates.lastSeen(mandate.id);
   const sinceLast =
-    previous.price === null ? 0 : moveBps(fp.parse(previous.price), market.bestBid);
+    previous.price === null ? 0 : moveBps(fp.parse(previous.price), reading.price);
 
   const trigger = evaluateMandate({
     mandate,
-    bidPrice: market.bestBid,
+    bidPrice: reading.price,
     heldQuantity: held,
-    minQuantity: filters.minQuantity,
-    minNotional: filters.minNotional,
+    minQuantity: reading.minQuantity,
+    minNotional: reading.minNotional,
     now,
     moveSinceLastCheckBps: sinceLast,
   });
 
-  deps.store.mandates.recordCheck(mandate.id, fp.format(market.bestBid), now);
+  deps.store.mandates.recordCheck(mandate.id, fp.format(reading.price), now);
   if (trigger.kind === "idle") {
     deps.store.mandates.recordProgress(
       mandate.id,
@@ -252,11 +259,12 @@ async function visit(deps: MonitorDeps, mandate: ExitMandate, now: Instant): Pro
     return { text: `${symbol}: ${trigger.because}`, fired: false };
   }
 
-  return fire(deps, mandate, trigger, now);
+  return fire(deps, venue, mandate, trigger, now);
 }
 
 async function fire(
   deps: MonitorDeps,
+  venue: Venue,
   mandate: ExitMandate,
   trigger: Extract<MandateTrigger, { kind: "fire" }>,
   now: Instant,
@@ -314,9 +322,8 @@ async function fire(
   );
   const clientOrderId = clientOrderIdFrom(idempotencyKey);
 
-  const placed = await deps.binance.placeMarketOrder({
+  const placed = await venue.exit({
     symbol,
-    side: "SELL",
     quantity: trigger.sellQuantity,
     clientOrderId,
   });

@@ -259,6 +259,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
 
   const planDeps: PlanDeps = {
     store,
+    futures,
+
     binance,
     hash: sha256,
     random: tradingDeps.random,
@@ -273,6 +275,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
 
   const monitorDeps: MonitorDeps = {
     store,
+    futures,
+
     binance,
     log,
     now: () => clock.now(),
@@ -291,6 +295,13 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const watchDeps: WatchDeps = {
     store,
     binance,
+    futures,
+    // Futures has no cheap list-all, so this is a watchlist rather than a
+    // discovery. Anything Kertel has ever held a futures mandate on, plus the
+    // explicitly allowed symbols, plus the two liquid defaults — because the
+    // position most worth finding is the one nobody planned an exit for, and
+    // that one is by definition absent from the mandate table.
+    futuresSymbols: futuresWatchlist(store, config.policy.trading.allowedSymbols),
     now: () => clock.now(),
     quoteAsset: "USDT",
     allowedSymbols: config.policy.trading.allowedSymbols,
@@ -614,4 +625,23 @@ export function spentToday(runtime: Runtime): string {
 
 export function todayKey(runtime: Runtime): string {
   return utcDay(runtime.clock.now());
+}
+
+/**
+ * Which futures symbols a sweep should look at.
+ *
+ * USDⓈ-M has no "list my positions" that is free to call, so Kertel cannot
+ * discover a position it was never told about. This builds the next best
+ * thing: everything it has ever managed on futures, everything the operator
+ * named, and the two pairs almost every account touches.
+ */
+function futuresWatchlist(store: Store, allowed: readonly Symbol_[]): readonly Symbol_[] {
+  const seen = new Set<string>(["ETHUSDT", "BTCUSDT"]);
+  for (const symbol of allowed) {
+    if (symbol !== ("*" as Symbol_)) seen.add(symbol);
+  }
+  for (const mandate of store.mandates.all()) {
+    if (mandate.market === "futures") seen.add(mandate.symbol);
+  }
+  return [...seen].map((name) => name as Symbol_);
 }

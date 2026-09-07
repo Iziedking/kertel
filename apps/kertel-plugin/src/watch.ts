@@ -36,11 +36,17 @@ import type { ExitMandate } from "@kertel/core/mandates";
 import { instrumentFor } from "@kertel/providers";
 
 import type { BinanceClient } from "./infra/binance.js";
+import type { FuturesClient } from "./infra/futures.js";
+import { isFlat, liquidationDistanceBps, positionSide } from "./infra/futures.js";
 import type { Store } from "./infra/store.js";
 
 export type WatchDeps = {
   readonly store: Store;
   readonly binance: BinanceClient;
+  /** Null off the Agent OS rail. Then there are no futures positions to miss. */
+  readonly futures: FuturesClient | null;
+  /** Which futures symbols to check. Futures has no cheap list-all. */
+  readonly futuresSymbols: readonly Symbol_[];
   readonly now: () => Instant;
   readonly quoteAsset: string;
   readonly allowedSymbols: readonly Symbol_[];
@@ -118,9 +124,17 @@ export async function watchHoldings(
       continue;
     }
 
-    const symbol = deps.allowedSymbols.find(
+    // A mapped instrument answers first, because it carries the exact pair.
+    // Failing that, the conventional pair against the quote asset — since the
+    // symbol gate now accepts "*", a holding is no longer outside Kertel's
+    // remit merely because nobody wrote a provider mapping for it.
+    const mapped = deps.allowedSymbols.find(
       (candidate) => instrumentFor(candidate)?.baseAsset === balance.asset,
     );
+    const wildcard = deps.allowedSymbols.includes("*" as Symbol_);
+    const symbol =
+      mapped ??
+      (wildcard ? (`${balance.asset}${deps.quoteAsset}` as Symbol_) : undefined);
     if (symbol === undefined) {
       // Held, but outside what Kertel is allowed to touch. Still worth showing:
       // an unmanaged position is exactly what this sweep is looking for.
@@ -155,7 +169,76 @@ export async function watchHoldings(
     });
   }
 
-  const findings: Finding[] = [];
+  // Futures, which a spot balance sweep cannot see at all.
+  //
+  // A leveraged position is the one most worth surfacing here: it is the only
+  // kind that can be closed by the exchange rather than by you, so "nothing is
+  // watching this" is a materially worse sentence about a futures position than
+  // about a spot bag.
+  const futuresFindings: Finding[] = [];
+  const futuresLines: string[] = [];
+  if (deps.futures !== null) {
+    for (const symbol of deps.futuresSymbols) {
+      const position = await deps.futures.position(symbol);
+      if (!position.ok || isFlat(position.value)) {
+        continue;
+      }
+      const open = position.value;
+      const side = positionSide(open);
+      const distance = liquidationDistanceBps(open);
+      const size = fp.abs(open.positionAmt);
+      const mandate =
+        mandates.find(
+          (candidate) =>
+            candidate.symbol === symbol &&
+            candidate.market === "futures" &&
+            candidate.status === "active",
+        ) ?? null;
+
+      futuresLines.push(
+        `  ${symbol} futures ${side} ${fp.format(size)} at ${fp.format(fp.trim(open.entryPrice, 2))}` +
+          `, mark ${fp.format(fp.trim(open.markPrice, 2))}` +
+          (distance === null ? "" : `, liquidation ${(distance / 100).toFixed(1)}% away`) +
+          (mandate === null ? " — NO EXIT PLAN" : " — managed"),
+      );
+
+      if (mandate === null) {
+        futuresFindings.push({
+          severity: "high",
+          asset: symbol,
+          headline: `${symbol} futures ${side} has no exit plan`,
+          detail:
+            `${fp.format(size)} at ${String(open.leverage)}x${open.isolated ? " isolated" : " CROSS"}. ` +
+            (distance === null
+              ? "Nothing will close this but you."
+              : `Liquidation is ${(distance / 100).toFixed(1)}% away, and nothing will close this before then but you.`) +
+            " Use kertel_plan_exit to hand it over.",
+        });
+      } else if (effectiveStopBps(mandate) === null) {
+        futuresFindings.push({
+          severity: "high",
+          asset: symbol,
+          headline: `${symbol} futures has a plan with no downside protection`,
+          detail:
+            "The plan takes profit but has no stop, no trailing stop and no breakeven. On leverage " +
+            "that means the only floor under it is the exchange's own liquidation.",
+        });
+      }
+
+      if (!open.isolated) {
+        futuresFindings.push({
+          severity: "high",
+          asset: symbol,
+          headline: `${symbol} futures is on cross margin`,
+          detail:
+            "The whole futures wallet backs this position, not just its margin. Kertel opens isolated; " +
+            "this one was not opened by Kertel, or was changed afterwards.",
+        });
+      }
+    }
+  }
+
+  const findings: Finding[] = [...futuresFindings];
   const dust = fp.parse(DUST_VALUE);
 
   for (const holding of holdings) {
@@ -251,8 +334,22 @@ export async function watchHoldings(
     lines.push(`  ${holding.asset.padEnd(6)} ${fp.format(holding.free)}  ${worth}  [${guard}]`);
   }
 
+  if (futuresLines.length > 0) {
+    lines.push("");
+    lines.push("Futures");
+    for (const line of futuresLines) {
+      lines.push(line);
+    }
+  }
+
   lines.push("");
   lines.push(`Portfolio: about ${fp.format(portfolioValue)} ${deps.quoteAsset}`);
+  if (futuresLines.length > 0) {
+    // Deliberately not added together. Spot value is what you own; a futures
+    // position is exposure backed by margin, and summing the two would overstate
+    // what is actually at risk in one direction and understate it in the other.
+    lines.push("  (futures positions are listed separately; margin is not spot value)");
+  }
   lines.push("");
 
   if (findings.length === 0) {
