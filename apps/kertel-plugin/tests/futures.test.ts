@@ -216,6 +216,42 @@ describe("opening a position", () => {
     expect(result.body).toContain("2500");
   });
 
+  it("allows a size that still clears the minimum after flooring", async () => {
+    // The companion to the test below. 21 at 2600 floors to 0.008 ETH, a 20.80
+    // position, which clears the 20.00 minimum. Same request, different price,
+    // opposite answer — so the refusal below is about the arithmetic and not
+    // about the number 21.
+    const fake = fakeFutures({ ticker: fp.parse("2600.00") });
+    const result = await proposeFutures(deps(fake.client), {
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "21",
+      leverage: 3,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses when flooring drops the position under Binance's minimum", async () => {
+    // 21 at 2496.72 floors to 0.008 ETH, a 19.97 position, against a 20.00
+    // minimum. The exchange answers -4164, and it would arrive after the code
+    // was typed. Kertel refuses before issuing one.
+    const fake = fakeFutures({ ticker: fp.parse("2496.72") });
+    const result = await proposeFutures(deps(fake.client), {
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "21",
+      leverage: 3,
+    });
+
+    expect(result.refusalCode).toBe("NOTIONAL_BELOW_EXCHANGE_MINIMUM");
+    expect(result.body).toContain("19.97");
+    // And it names a size that would work rather than leaving you guessing.
+    expect(result.body).toContain("0.009");
+    expect(result.body).toContain("22.47");
+    expect(fake.calls).not.toContain("open");
+  });
+
   it("refuses when the ticker has no price, rather than sizing off a zero", async () => {
     const fake = fakeFutures({ ticker: null });
     const result = await proposeFutures(deps(fake.client), {

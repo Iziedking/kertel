@@ -199,6 +199,27 @@ export async function proposeFutures(
     );
   }
   const actualNotional = fp.multiply(quantity, mark);
+
+  // Check the minimum again, against what will actually be sent.
+  //
+  // The check above ran on the requested notional; this one runs on what
+  // survived the lot step, and the two differ by up to one step. On ETHUSDT a
+  // step is 0.001 ETH, worth about 2.50, so asking for 21 floors to 0.008 and
+  // sends a 19.97 position into a 20.00 minimum. Binance answers -4164 and the
+  // rejection arrives after the code was typed, which is the worst moment for
+  // it. Refusing here names the amount that would work instead.
+  if (fp.lessThan(actualNotional, filters.minNotional)) {
+    const nextQuantity = fp.add(quantity, filters.stepSize);
+    const nextNotional = fp.multiply(nextQuantity, mark);
+    return fail(
+      refuse(
+        "NOTIONAL_BELOW_EXCHANGE_MINIMUM",
+        `${fp.format(notional)} floors to ${fp.format(quantity)} ${symbol.replace("USDT", "")} at ${fp.format(mark)}, which is a ${fp.format(fp.trim(actualNotional, 2))} position — under Binance's ${fp.format(filters.minNotional)} minimum. The lot step is ${fp.format(filters.stepSize)}, so the next size up is ${fp.format(nextQuantity)}: ask for ${fp.format(fp.trim(nextNotional, 2))} or more.`,
+        { requested: fp.format(notional), wouldSend: fp.format(actualNotional) },
+      ).error,
+    );
+  }
+
   const margin = fp.divide(actualNotional, fp.parse(String(input.leverage)), 2, "ceil");
 
   // Isolated first, then leverage. Both before a code is issued, so a user is
