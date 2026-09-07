@@ -23,7 +23,8 @@
     "probe:providers": "tsx scripts/probe-providers.ts",
     "probe:adapters": "tsx scripts/probe-adapters.ts",
     "probe:futures": "tsx scripts/probe-futures.ts",
-    "probe:spot": "tsx scripts/probe-spot.ts"
+    "probe:spot": "tsx scripts/probe-spot.ts",
+    "probe:watch": "tsx scripts/probe-watch.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.0",

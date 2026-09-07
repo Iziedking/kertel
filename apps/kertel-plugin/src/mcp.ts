@@ -81,6 +81,8 @@ export function buildServer(runtime: Runtime): McpServer {
         "      For a futures position always state how far liquidation is.",
         "- \"sell half at 50% up\" / \"take profits\" / \"protect this\" / \"set a stop\"",
         "    -> kertel_plan_exit, show the real prices each leg fires at, then kertel_arm on their say-so.",
+        "      Works on futures as well as spot, and finds which by itself. Once armed, Kertel trims,",
+        "      trails and stops out on its own — that is the point of it, so say so plainly.",
         "- \"sell it\" / \"get me out\" / \"close it\"",
         "    -> kertel_propose SELL for spot, kertel_futures_close for futures.",
         "- \"what did you do\" / \"how have my trades gone\" -> kertel_journal, then kertel_review.",
@@ -110,6 +112,9 @@ export function buildServer(runtime: Runtime): McpServer {
         "- Futures (kertel_futures_*) is leveraged and can lose more than the margin. The same code",
         "  discipline applies. Kertel forces isolated margin and caps leverage; do not argue with either.",
         "  Report the liquidation distance whenever you report a futures position.",
+        "  A leveraged position with no exit plan is the single most important thing kertel_watch can",
+        "  tell you about, because it is the only kind the exchange can close for you. Never leave one",
+        "  unmentioned, and offer kertel_plan_exit when you find it.",
         "",
         "When Kertel refuses, the refusal is the answer. Report it and its reason; do not work around it,",
         "retry it with different numbers, or reach for another tool to do the same thing.",
@@ -319,6 +324,14 @@ export function buildServer(runtime: Runtime): McpServer {
           .default(null)
           .describe("What the position cost. Null uses the current bid, which only suits a fresh entry."),
         holdDays: z.number().int().positive().max(90).default(30),
+        market: z
+          .enum(["spot", "futures"])
+          .optional()
+          .describe(
+            "Which venue holds the position. Omit and Kertel works it out: an open futures " +
+              "position in this symbol means futures, anything else means spot. Only say it " +
+              "when both are held at once.",
+          ),
       },
     },
     async (args) =>
@@ -336,6 +349,7 @@ export function buildServer(runtime: Runtime): McpServer {
           quantity: args.quantity,
           entryPrice: args.entryPrice,
           holdDays: args.holdDays,
+          market: args.market ?? null,
         });
         return text(result.body, !result.ok);
       }),
