@@ -96,6 +96,8 @@ function toMandate(row: Record<string, unknown>): ExitMandate {
     id: String(row["id"]) as MandateId,
     senderIdHash: String(row["sender_hash"]) as SenderIdHash,
     symbol: String(row["symbol"]) as Symbol_,
+    // Rows written before futures existed carry no market; they are all spot.
+    market: row["market"] === "futures" ? "futures" : "spot",
     entryPrice: fp.parse(String(row["entry_price"])),
     quantity: fp.parse(String(row["quantity"])),
     ladder: JSON.parse(String(row["ladder_json"])) as readonly LadderRung[],
@@ -142,15 +144,16 @@ export function mandateStore(db: DatabaseSync): MandateStore {
     save(mandate, lastSeenPrice, lastCheckedAt, codeHash = null) {
       db.prepare(
         `INSERT OR REPLACE INTO mandates
-           (id, sender_hash, symbol, entry_price, quantity, ladder_json, stop_loss_bps,
+           (id, sender_hash, symbol, market, entry_price, quantity, ladder_json, stop_loss_bps,
             trailing_activate_bps, trailing_bps, breakeven_at_bps, high_water_bps, sold_bps,
             sold_quantity, created_at, expires_at, status, source_proposal_id, code_hash,
             last_seen_price, last_checked_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         mandate.id,
         mandate.senderIdHash,
         mandate.symbol,
+        mandate.market,
         fp.format(mandate.entryPrice),
         fp.format(mandate.quantity),
         JSON.stringify(mandate.ladder),

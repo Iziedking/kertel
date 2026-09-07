@@ -134,6 +134,9 @@ CREATE TABLE IF NOT EXISTS mandates (
   id TEXT PRIMARY KEY,
   sender_hash TEXT NOT NULL,
   symbol TEXT NOT NULL,
+  -- 'spot' or 'futures'. Defaulted rather than added bare, because databases
+  -- written before futures existed hold live mandates that are all spot.
+  market TEXT NOT NULL DEFAULT 'spot',
   entry_price TEXT NOT NULL,
   quantity TEXT NOT NULL,
   ladder_json TEXT NOT NULL,

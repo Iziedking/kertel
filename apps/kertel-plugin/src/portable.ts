@@ -110,6 +110,10 @@ export function snapshot(deps: PortableDeps): string {
         "PLAN",
         `id=${mandate.id}`,
         `symbol=${mandate.symbol}`,
+        // Carried, so a plan restored on another machine exits on the venue it
+        // was opened on. A snapshot written before futures existed omits it and
+        // reads back as spot, which is what it was.
+        `market=${mandate.market}`,
         `status=${mandate.status}`,
         `entry=${fp.format(mandate.entryPrice)}`,
         `qty=${fp.format(mandate.quantity)}`,
@@ -229,6 +233,9 @@ export async function restore(deps: PortableDeps, text: string): Promise<Restore
         id: id as MandateId,
         senderIdHash: deps.ownerHash as SenderIdHash,
         symbol: symbol as Symbol_,
+        // A snapshot written before futures existed carries no market, and
+        // everything in one is spot.
+        market: field(parts, "market") === "futures" ? "futures" : "spot",
         entryPrice: fp.parse(entry),
         quantity: fp.parse(qty),
         soldQuantity: fp.parse(field(parts, "sold") ?? "0"),

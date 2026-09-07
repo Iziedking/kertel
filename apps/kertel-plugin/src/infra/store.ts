@@ -127,6 +127,7 @@ export function openStore(path: string): Store {
   db.exec("PRAGMA foreign_keys = ON");
   db.exec(SCHEMA);
   db.exec(TRADE_SCHEMA);
+  migrate(db);
 
   const trades = tradeStore(db);
   const mandates = mandateStore(db);
@@ -249,4 +250,31 @@ export function openStore(path: string): Store {
       db.close();
     },
   };
+}
+
+/**
+ * Bring an older database up to the current shape.
+ *
+ * `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, so
+ * a column added after someone started using Kertel never appears on their
+ * database — and the failure is silent until a query asks for it. Anyone
+ * running a live position through an upgrade has exactly that database.
+ *
+ * Each step is checked before it is applied and is safe to run on every start.
+ * There is no version counter on purpose: the checks are the version, and they
+ * cannot disagree with reality the way a counter can.
+ */
+function migrate(db: DatabaseSync): void {
+  const columns = (name: string): Set<string> =>
+    new Set(
+      (db.prepare(`PRAGMA table_info(${name})`).all() as Record<string, unknown>[]).map((row) =>
+        String(row["name"]),
+      ),
+    );
+
+  // Added when futures exits arrived. Everything written before then was spot,
+  // which is exactly what the default says.
+  if (!columns("mandates").has("market")) {
+    db.exec("ALTER TABLE mandates ADD COLUMN market TEXT NOT NULL DEFAULT 'spot'");
+  }
 }

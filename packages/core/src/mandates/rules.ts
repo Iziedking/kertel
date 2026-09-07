@@ -78,6 +78,19 @@ export type ExitMandate = {
   readonly id: MandateId;
   readonly senderIdHash: SenderIdHash;
   readonly symbol: Symbol_;
+  /**
+   * Which venue holds the position.
+   *
+   * The triggers are identical either way — a target is a target — but what is
+   * on the other side of them is not. A spot exit sells coins from a balance; a
+   * futures exit sends an opposite-side reduce-only order against a position
+   * that can be liquidated out from under the plan. The monitor reads this to
+   * decide which venue to ask and which exit to send.
+   *
+   * Long-only for now, on both. Every trigger here measures a gain as price
+   * rising above entry, so a short would invert all of them.
+   */
+  readonly market: "spot" | "futures";
   /** What the position actually cost. Every trigger measures from here. */
   readonly entryPrice: FixedPoint;
   /** The original size. Ladder fractions are shares of this. */
