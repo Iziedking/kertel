@@ -2,7 +2,7 @@
 
 A trading agent for Binance Spot that buys its own research, refuses what it cannot justify, and manages positions on its own once you approve a plan.
 
-It runs as an MCP server. Claude Code, Claude, Codex, ChatGPT and VS Code become the reasoning layer; Kertel is the part that handles money, and it is deterministic.
+It runs as an MCP server and trades through **Binance Agent OS**. Claude Code, Claude, Codex, ChatGPT and VS Code become the reasoning layer; Kertel is the part that handles money, and it is deterministic.
 
 ```
 You:     research ETH, should I buy
@@ -26,6 +26,27 @@ Not spent: $0.02
 ```
 
 Every line above came from a live run. The prices are real, the payments settle on chain over x402, and two of the four providers are paid through Binance's own B402 rail.
+
+## It trades through Agent OS
+
+Orders go out through the Agent OS MCP server and land in the **Agentic sub-account**. The token Binance issues carries these scopes and no others:
+
+```
+mcp:account:read  mcp:spot:trade  mcp:margin:loan
+mcp:futures:trade mcp:wallet:transfer mcp:master:read
+```
+
+There is no withdrawal scope to grant. That is a stronger guarantee than an API key with the withdrawal box unticked, because it is not a box anybody can later tick.
+
+Three things about the live server contradict its own documentation, and each one breaks code written from the docs:
+
+- Tool names use dots. `spot.newOrder`, not `spot_newOrder`. The underscore form is what MCP clients rename them to.
+- `tools/list` returns fifty "always exposed" tools in alphabetical order, which stops partway through `margin.*`. Every `spot.*` tool is past that cut and invisible there.
+- So everything goes through `tool_execute`. Calling `spot.exchangeInfo` directly answers "Tool not found".
+
+The token is a plain bearer credential that lasts thirty days, with no refresh grant advertised. A server runs unattended for a month, then needs one browser sign-in. `kertel_status` says which rail it is on, and a lapsed token refuses with the expiry named rather than failing obscurely.
+
+Kertel falls back to a Binance API key when no Agent OS token is set, because a machine whose token lapsed still has to manage open positions. Both paths implement the same interface and share the same parsers, so refusals read identically either way.
 
 ## What it does that other agents don't
 
@@ -122,8 +143,8 @@ Copy `.env.example` to `.env`. Every variable is optional; an unset one disables
 
 To trade you need two things:
 
-1. A Binance API key with Reading and Spot Trading enabled and **Withdrawals off**. With withdrawals disabled the worst case of a full compromise is bad trades, not drained funds.
-2. USDT in that account. The exchange minimum is 5.00 and the default per-trade cap is 25.00.
+1. An Agent OS token in `KERTEL_BINANCE_MCP_TOKEN`, from one browser sign-in. Or a Binance API key with Reading and Spot Trading enabled and **Withdrawals off**, if you would rather not re-authenticate monthly.
+2. USDT in the account. The Agentic sub-account starts empty and is funded at `binance.com/en/my/sub-account/asset-management/transfer`. The exchange minimum is 5.00 and the default per-trade cap is 25.00.
 
 Research payments need a separate EVM key funded with a few dollars of USDC on Base, or U on BNB Smart Chain to route through B402. Payments are gasless. Kertel refuses to start if the two keys are the same, because the research wallet spends cents and the exchange key moves the trading balance.
 
@@ -138,15 +159,21 @@ Verified on 2026-09-07 against live endpoints.
 | Research over x402 (CoinGecko, CoinMarketCap, Nansen) | Live. All four providers probed, pins matched, prices confirmed. |
 | Binance B402 rail | Live. CoinMarketCap and Nansen settle in $U on BNB Smart Chain. |
 | Free Binance market data | Live. |
-| Spot order execution | Wired and tested. Needs an API key and funding. |
+| Spot order execution via Agent OS | Wired and verified against the live server: filters, book and account all read through `tool_execute`. Needs funding. |
 | Autonomous exits | Wired and tested. Runs behind the same write gate. |
 | Portable state | Working. Round-trip tested across two machines. |
-| Binance Agent OS MCP | Authorised and probed. Not yet Kertel's execution path; see below. |
+| Binance Agent OS MCP | Kertel's execution path. Verified live on 2026-09-07 against the Agentic sub-account. |
 | The Graph pool data | Not wired. No subgraph chosen, and the receipt says so rather than implying onchain evidence. |
 | Daily loss and exposure caps | Not enforced yet. Both are passed as zero. The per-trade cap and balance check do apply. |
 | Limit orders | Modelled throughout, not wired. Market orders only. |
 
-Kertel trades through a Binance API key rather than the Agent OS MCP server. The MCP server authorises over browser OAuth and the credential lands in whichever client completed the flow; a monitor firing at 4am cannot re-run a browser login or borrow another client's session. The `BinanceClient` seam isolates this, so moving execution onto the Agentic sub-account is one file.
+Getting an Agent OS token takes one browser sign-in. Connect the MCP server to any supported client, authorise, and copy the `accessToken` the client stored:
+
+```bash
+claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
+```
+
+In Claude Code it lands in `~/.claude/.credentials.json` under `mcpOAuth`. Put it in `KERTEL_BINANCE_MCP_TOKEN`.
 
 ## How it is built
 
