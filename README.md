@@ -1,8 +1,10 @@
 # Kertel
 
-A trading agent for **Binance Spot** that buys its own research, refuses what it cannot justify, and manages positions on its own once you approve a plan.
+A trading agent for **Binance Spot and USDⓈ-M futures** that buys its own research, refuses what it cannot justify, and manages positions on its own once you approve a plan.
 
-Spot only, two symbols, market orders only. Every one of those is a deliberate limit rather than an unfinished edge, and `kertel_status` will tell you so on any machine you run it.
+Market orders only, and futures runs only on the Agent OS rail. Both are deliberate limits rather than unfinished edges, and `kertel_status` will tell you so on any machine you run it.
+
+It trades whatever Binance lists. There is no symbol allowlist to maintain: every proposal is checked against the live `exchangeInfo`, so a halted or delisted pair is refused on the day it halts.
 
 It runs as an MCP server and trades through **Binance Agent OS**. Claude Code, Claude, Codex, ChatGPT and VS Code become the reasoning layer; Kertel is the part that handles money, and it is deterministic.
 
@@ -131,6 +133,29 @@ What to do differently
 
 Steps 5 and 6 exist because a proposal is hashed when shown and re-hashed when confirmed. If any number moved in between, the code stops matching and the order is refused rather than executed against different figures.
 
+## Futures
+
+`kertel_futures_propose`, `kertel_futures_confirm`, `kertel_futures_close` and `kertel_futures_positions` follow the same propose-then-confirm spine as spot. What differs is what has to be true before a code is issued, because a futures position can lose more than it cost.
+
+Binance ships ETHUSDT at **20x on cross margin**, where the entire futures wallet backs the position and a 5% move is the whole margin. Read from the live account:
+
+```json
+{"symbol":"ETHUSDT","leverage":"20","marginType":"cross","markPrice":"0.00000000"}
+```
+
+Kertel sets isolated margin and a leverage ceiling *before* it will issue a code, and refuses to open if either could not be set. It never opens into the default and hopes.
+
+Four gates that spot does not need:
+
+- **Isolated margin, always.** A failure to set it is a refusal, not a warning.
+- **A leverage ceiling** in `KERTEL_MAX_LEVERAGE`, default 3. Configuration, not something the model can argue its way past.
+- **A cap on the position, not the margin.** Leverage means 17 USDT of margin controls a 50 USDT position, so the spot per-trade cap does not bound the risk. `KERTEL_MAX_FUTURES_NOTIONAL` bounds the position itself.
+- **Liquidation shown before you agree.** The proposal states where the exchange would close the position for you, and says so plainly when that is inside an ordinary day's range.
+
+Closes are **reduce-only**, so a close that arrives twice cannot flip the position onto the other side. Kertel will not average into a position you did not plan: an open position is a refusal, not a top-up.
+
+That `markPrice` of zero above is not a quirk to note in passing. A flat position reports a zero mark, and flat is the state every first entry is sized from — so sizing off the position's own mark meant no position could ever be opened. Kertel reads the mark from the price ticker instead, and a test pins it.
+
 ## What it refuses to do
 
 Refusals are returned values, not exceptions, and there are 47 of them with stable codes. The ones that matter most:
@@ -189,8 +214,9 @@ Verified on 2026-09-07 against live endpoints.
 | The Graph pool data | Not wired. No subgraph chosen, and the receipt says so rather than implying onchain evidence. |
 | Daily loss and exposure caps | Not enforced yet. Both are passed as zero. The per-trade cap and balance check do apply. |
 | Limit orders | Modelled throughout, not wired. Market orders only. |
-| Futures, margin, convert | Not used. The Agent OS token carries those scopes; Kertel touches none of them. |
-| Symbols | ETHUSDT and BTCUSDT. Anything else is refused before a provider is called. |
+| USDⓈ-M futures | Wired and tested. Isolated margin and a leverage ceiling are set before a position can open; the proposal shows the liquidation price before you agree. Agent OS rail only. |
+| Margin, convert | Not used. The Agent OS token carries those scopes; Kertel touches neither. |
+| Symbols | Anything Binance lists as TRADING, checked live per proposal. Paid research providers refuse an unmapped symbol by name rather than guessing its id. |
 
 Getting an Agent OS token takes one browser sign-in. Connect the MCP server to any supported client, authorise, and copy the `accessToken` the client stored:
 
