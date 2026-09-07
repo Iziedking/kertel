@@ -351,22 +351,26 @@ export function renderProposal(input: ProposalReceiptInput): string {
   }
   lines.push("");
 
-  lines.push(`Quantity:   ${fp.format(input.quantity)} ${input.baseAsset}`);
-  lines.push(`Price now:  ${fp.format(input.referencePrice)} ${input.quoteAsset}`);
-  lines.push(`Cost:       ${fp.format(input.estimatedNotional)} ${input.quoteAsset}`);
-  lines.push(`Fee (est):  ${fp.format(input.estimatedFee)} ${input.quoteAsset}`);
+  // Binance carries eight decimals on everything. Past the cents those are the
+  // exchange's storage precision rather than money, and printing them reads as
+  // false precision on a number someone is about to agree to. The base amount
+  // keeps whatever the lot step needs; the quote amounts keep at least cents.
+  lines.push(`Quantity:   ${fp.format(fp.trim(input.quantity))} ${input.baseAsset}`);
+  lines.push(`Price now:  ${fp.format(fp.trim(input.referencePrice, 2))} ${input.quoteAsset}`);
+  lines.push(`Cost:       ${fp.format(fp.trim(input.estimatedNotional, 2))} ${input.quoteAsset}`);
+  lines.push(`Fee (est):  ${fp.format(fp.trim(input.estimatedFee, 2))} ${input.quoteAsset}`);
 
   // Rounding down to the exchange step is invisible unless it is said.
   if (fp.greaterThan(input.requestedNotional, input.estimatedNotional)) {
     const shortfall = fp.subtract(input.requestedNotional, input.estimatedNotional);
     lines.push(
-      `            (you asked for ${fp.format(input.requestedNotional)}; the exchange step size leaves ${fp.format(shortfall)} unspent)`,
+      `            (you asked for ${fp.format(fp.trim(input.requestedNotional, 2))}; the exchange step size leaves ${fp.format(fp.trim(shortfall, 2))} unspent)`,
     );
   }
   lines.push("");
 
   lines.push(
-    `Worst fill Kertel will accept: ${fp.format(input.worstPrice)} (${String(input.maxSlippageBps)} bps)`,
+    `Worst fill Kertel will accept: ${fp.format(fp.trim(input.worstPrice, 2))} (${String(input.maxSlippageBps)} bps)`,
   );
   lines.push("");
 

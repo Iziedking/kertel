@@ -172,7 +172,6 @@ export async function propose(
   deps: TradingDeps,
   input: { readonly symbol: string; readonly side: "BUY" | "SELL"; readonly notional: string },
 ): Promise<TradeOutcome> {
-  const now = deps.now();
   const symbol = input.symbol.trim().toUpperCase() as Symbol_;
 
   if (deps.ownerHash === null) {
@@ -220,6 +219,21 @@ export async function propose(
   const context = await marketContext(deps, symbol);
   if (!context.ok) return refusalOf(deps, context.error, symbol);
   const { filters, market, account } = context.value;
+
+  // Read the clock after the exchange, never before.
+  //
+  // The freshness rule compares the snapshot's `observedAt` against this, and
+  // refuses a negative age as firmly as an old one, because a price stamped in
+  // the future means something is wrong with the clock or the feed. On the
+  // Agent OS rail each read is a network hop — filters alone measured 3.1s
+  // against the live server — so a `now` taken at the top of this function is
+  // several seconds older than the snapshot it is about to judge, and every
+  // proposal refuses as stale. A frozen test clock hides this completely:
+  // fixture reads cost no time, so the two stamps come out equal.
+  //
+  // This is also the honest stamp for the proposal itself: it was made now,
+  // not when the request arrived.
+  const now = deps.now();
 
   // A buy fills at the ask, so that is the price it is sized from.
   const sized = sizeFromNotional({
@@ -342,10 +356,10 @@ export async function propose(
       code: issued.code,
       expiresAt: proposal.expiresAt,
       evidenceSummary: [
-        `Binance book: bid ${fp.format(market.bestBid)} / ask ${fp.format(market.bestAsk)}`,
+        `Binance book: bid ${fp.format(fp.trim(market.bestBid, 2))} / ask ${fp.format(fp.trim(market.bestAsk, 2))}`,
         market.averagePrice === null
           ? `No venue average available; the exchange minimum was checked against the last price only.`
-          : `Venue ${String(filters.notionalAveragePriceMinutes)}-minute average: ${fp.format(market.averagePrice)}`,
+          : `Venue ${String(filters.notionalAveragePriceMinutes)}-minute average: ${fp.format(fp.trim(market.averagePrice, 2))}`,
       ],
       now,
     }),

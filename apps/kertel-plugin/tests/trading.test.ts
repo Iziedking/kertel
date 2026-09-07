@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import * as fp from "@kertel/core/money";
-import { fixedClock, instant, ok, refuse } from "@kertel/core/domain";
+import { fixedClock, instant, ok, refuse, seconds } from "@kertel/core/domain";
 import type { Symbol_ } from "@kertel/core/domain";
 
 import type { BinanceClient, PlacedOrder } from "../src/infra/binance.js";
@@ -130,6 +130,130 @@ function codeFrom(body: string): string {
   if (match === null) throw new Error(`no confirmation code in:\n${body}`);
   return match[0];
 }
+
+describe("a slow exchange", () => {
+  it("does not call a fresh price stale because the read took time", async () => {
+    // Regression, found live and not by any fixture.
+    //
+    // On the Agent OS rail every read is a network hop; filters alone measured
+    // 3.1s against the live server. `propose` used to stamp its `now` on entry,
+    // before those reads, so the snapshot it then judged carried an `observedAt`
+    // several seconds LATER than `now`. The freshness rule refuses a negative
+    // age as firmly as an old one, so every live proposal came back
+    // MARKET_DATA_STALE while the price was in fact fresh.
+    //
+    // Every other test in this file hides it: a frozen clock plus fixture reads
+    // that cost no time make the two stamps equal, and equal passes.
+    const clock = fixedClock(NOW);
+    const store = openStore(":memory:");
+
+    const slowBinance = {
+      credentialed: true,
+      async filters() {
+        clock.advance(seconds(3)); // the exchange took three seconds to answer
+        return ok({
+          symbol: ETHUSDT,
+          baseAsset: "ETH",
+          quoteAsset: "USDT",
+          stepSize: fp.parse("0.0001"),
+          tickSize: fp.parse("0.01"),
+          minQuantity: fp.parse("0.0001"),
+          maxQuantity: fp.parse("9000"),
+          marketMaxQuantity: null,
+          minNotional: fp.parse("5.00"),
+          notionalAveragePriceMinutes: 5,
+        });
+      },
+      async market() {
+        clock.advance(seconds(1));
+        // Stamped when the exchange answered, which is now — after entry.
+        return ok({
+          symbol: ETHUSDT,
+          lastPrice: fp.parse("2500.00"),
+          bestBid: fp.parse("2500.00"),
+          bestAsk: fp.parse("2500.00"),
+          averagePrice: fp.parse("2500.00"),
+          observedAt: clock.now(),
+          source: "test",
+        });
+      },
+      async account() {
+        clock.advance(seconds(1));
+        return ok({
+          accountRef: "test",
+          canTradeSpot: true,
+          observedAt: clock.now(),
+          balances: [
+            { asset: "USDT", free: fp.parse("500.00"), locked: fp.parse("0") },
+            { asset: "ETH", free: fp.parse("1.0"), locked: fp.parse("0") },
+          ],
+        });
+      },
+      async placeMarketOrder() {
+        throw new Error("propose must not place an order");
+      },
+      async findOrder() {
+        return ok(null);
+      },
+    } as unknown as BinanceClient;
+
+    const runtime = createRuntime({
+      config: loadConfig({
+        KERTEL_OWNER_WHATSAPP: OWNER,
+        KERTEL_X402_PRIVATE_KEY: KEY,
+        KERTEL_BINANCE_API_KEY: "k",
+        KERTEL_BINANCE_API_SECRET: "s",
+      }),
+      clock,
+      store,
+      log: createLogger({ level: "silent" }),
+      binance: slowBinance,
+      random: (count: number) => new Uint8Array(count).fill(7),
+      newId: (prefix: string) => `${prefix}-test`,
+    });
+
+    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+
+    expect(result.refusalCode).not.toBe("MARKET_DATA_STALE");
+    expect(result.ok).toBe(true);
+    expect(result.body).toContain("confirm KTL-");
+    runtime.close();
+  });
+
+  it("still refuses a price that really is too old", async () => {
+    // The guard must survive the fix: a snapshot from ten minutes ago is stale
+    // however long the reads took.
+    const clock = fixedClock(NOW);
+    const store = openStore(":memory:");
+    const stale = fakeBinance();
+    const original = stale.market.bind(stale);
+    stale.market = async () => {
+      const snapshot = await original();
+      return snapshot.ok
+        ? ok({ ...snapshot.value, observedAt: instant(NOW - 600_000) })
+        : snapshot;
+    };
+
+    const runtime = createRuntime({
+      config: loadConfig({
+        KERTEL_OWNER_WHATSAPP: OWNER,
+        KERTEL_X402_PRIVATE_KEY: KEY,
+        KERTEL_BINANCE_API_KEY: "k",
+        KERTEL_BINANCE_API_SECRET: "s",
+      }),
+      clock,
+      store,
+      log: createLogger({ level: "silent" }),
+      binance: stale,
+      random: (count: number) => new Uint8Array(count).fill(7),
+      newId: (prefix: string) => `${prefix}-test`,
+    });
+
+    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    expect(result.refusalCode).toBe("MARKET_DATA_STALE");
+    runtime.close();
+  });
+});
 
 describe("preparing an order", () => {
   it("shows the numbers that will actually be sent", async () => {
