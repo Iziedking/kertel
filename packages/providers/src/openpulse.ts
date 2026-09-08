@@ -25,13 +25,19 @@
  * Telt's buyer speaks. No protocol work was needed, which is the only reason
  * this could be added safely in a day.
  *
- * **The shapes below are held loosely on purpose.** These endpoints were
- * confirmed to exist and to charge; their success payloads had not been paid
- * for when this was written. So every field is read defensively and anything
- * unrecognised returns null rather than a guess. The worst case is a wasted
- * cent and a receipt that says the source was unreadable — never a number
- * invented from a field that happened to parse. When the first paid call lands,
- * check it against this and tighten it to the shape that actually arrived.
+ * **Only `safety` is wired into a recipe, and only because it was paid for.**
+ * On 2026-09-08 a real payment was made to each of these. `safety` answered
+ * with the payload the field names below are taken from. `sentiment` took the
+ * money and answered 401, which is worse than useless: Telt treats a
+ * signed-but-unconfirmed payment as X402_PAYMENT_UNKNOWN and engages the kill
+ * switch, so wiring it would have stopped the agent on every research run. The
+ * candles endpoint was never paid for at all.
+ *
+ * So the sentiment and candles adapters below are present and unwired. Pay for
+ * one, look at what arrives, correct the field names, and only then add its
+ * step back to the recipe — in that order. That order is the whole lesson of
+ * this file: a catalogue entry is a claim, and a 402 only proves an endpoint
+ * will take your money.
  */
 
 import { ok, refuse } from "@telt/core/domain";
@@ -177,28 +183,62 @@ export const openpulseSafetyAdapter: ProviderAdapter = {
     const address = context.instrument.nansenTokenAddresses[0];
     if (address === undefined) return null;
 
-    const score = numberFrom(data, ["score", "safetyScore", "riskScore", "rating"]);
-    const verdict = stringFrom(data, ["verdict", "status", "risk", "label", "result"]);
-    if (score === null && verdict === null) return null;
+    // The token the provider says it looked at must be the one asked about.
+    // Everything below is a statement about one specific contract, and reading
+    // a verdict for a different one is the worst mistake this module could make.
+    const answered = stringFrom(data, ["token_address"]);
+    if (answered !== null && answered.toLowerCase() !== address.toLowerCase()) {
+      return null;
+    }
+
+    const score = numberFrom(data, ["score"]);
+    const grade = stringFrom(data, ["grade"]);
+    if (score === null && grade === null) return null;
 
     const normalized: Record<string, unknown> = { contract: address };
     if (score !== null) normalized["safetyScore"] = score;
-    if (verdict !== null) normalized["verdict"] = verdict;
+    if (grade !== null) normalized["grade"] = grade;
 
-    // Booleans only when actually boolean. A missing honeypot flag must not
-    // read as "not a honeypot"; it reads as "not stated".
-    for (const [key, names] of [
-      ["honeypot", ["honeypot", "is_honeypot", "isHoneypot"]],
-      ["mintable", ["mintable", "can_mint", "canMint"]],
-      ["ownershipRenounced", ["renounced", "ownership_renounced", "ownershipRenounced"]],
+    // The provider's own plain-language findings, which are more useful to a
+    // reasoning layer than any single number it could be reduced to.
+    const risks = data["risks"];
+    if (Array.isArray(risks)) {
+      const stated = risks.filter((risk): risk is string => typeof risk === "string" && risk.trim() !== "");
+      if (stated.length > 0) normalized["risks"] = stated;
+    }
+
+    // Tri-state, and the distinction matters more here than anywhere else in
+    // Telt. This provider answers `is_honeypot: null` when its simulation could
+    // not run, and a null read as false is the difference between "we checked
+    // and it is safe" and "we could not check". Only a real boolean is carried.
+    for (const [key, name] of [
+      ["isHoneypot", "is_honeypot"],
+      ["hasMint", "has_mint"],
+      ["hasBlacklist", "has_blacklist"],
+      ["ownershipRenounced", "ownership_renounced"],
+      ["verifiedSource", "is_verified"],
+      ["isProxy", "is_proxy"],
+      ["hasLiquidityPool", "has_lp"],
     ] as const) {
-      for (const name of names) {
-        const value = (data as Record<string, unknown>)[name];
-        if (typeof value === "boolean") {
-          normalized[key] = value;
-          break;
-        }
-      }
+      const value = data[name];
+      if (typeof value === "boolean") normalized[key] = value;
+    }
+
+    // The figures a model can actually reason with. A token with no liquidity
+    // and no holders is untradeable whatever its score says, and saying that
+    // out loud beats a grade nobody can interrogate.
+    for (const [key, name] of [
+      ["liquidityUsd", "total_liquidity_usd"],
+      ["pairCount", "pair_count"],
+      ["holderCount", "holder_count"],
+      ["top10Pct", "top10_pct"],
+      ["top1Pct", "top1_pct"],
+      ["ageDays", "age_days"],
+      ["buyTaxPct", "buy_tax_pct"],
+      ["sellTaxPct", "sell_tax_pct"],
+    ] as const) {
+      const value = numberFrom(data, [name]);
+      if (value !== null) normalized[key] = value;
     }
 
     return Object.freeze(normalized);

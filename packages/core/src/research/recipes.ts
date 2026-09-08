@@ -59,7 +59,23 @@ export type RecipeStep = {
 const FREE = fp.parse("0.00");
 const CHEAP = fp.parse("0.01");
 const NANSEN = fp.parse("0.05");
-const CENT_HALF = fp.parse("0.005");
+
+/*
+ * Two OpenPulse steps were written and then removed before shipping, and the
+ * reason is worth keeping:
+ *
+ * - The sentiment endpoint charges, takes the money, and answers 401. Verified
+ *   on 2026-09-08 with a real payment. An endpoint that does that is not merely
+ *   useless here, it is dangerous: Telt treats a signed-but-unconfirmed payment
+ *   as X402_PAYMENT_UNKNOWN and engages the kill switch, so leaving it in the
+ *   recipe would have stopped the agent on every full research run.
+ * - The OHLCV candles endpoint was never paid for, and after the sentiment result
+ *   an unverified endpoint from the same provider is not something to put in
+ *   the path of a live trade on the strength of a catalogue entry.
+ *
+ * The adapters for both remain in @telt/providers, unwired. Pay for one, see
+ * what arrives, and add the step back — in that order.
+ */
 
 /**
  * Every step, in the order the planner prefers within a tier.
@@ -117,30 +133,6 @@ export const RECIPE_STEPS: readonly RecipeStep[] = Object.freeze([
     freshness: seconds(3600),
     rationale:
       "Honeypot, mint authority and ownership on the contract itself. A floor rather than an edge: it exists to stop a trade, so it is bought before anything that justifies one.",
-  },
-  {
-    id: "openpulse.sentiment",
-    provider: "openpulse",
-    capability: "market.sentiment",
-    endpointId: "openpulse:sentiment",
-    kind: "sentiment",
-    tier: 2,
-    estimatedCost: CHEAP,
-    freshness: seconds(900),
-    rationale:
-      "What is being said about it, aggregated. The cheapest way to learn that something changed which the price has not caught up with yet.",
-  },
-  {
-    id: "openpulse.candles",
-    provider: "openpulse",
-    capability: "market.technical",
-    endpointId: "openpulse:token/ohlcv",
-    kind: "technical",
-    tier: 2,
-    estimatedCost: CENT_HALF,
-    freshness: seconds(900),
-    rationale:
-      "The candles, so a technical read is measured rather than imagined. Telt reports the range and where price sits in it; it does not name patterns.",
   },
   {
     id: "nansen.netflow",

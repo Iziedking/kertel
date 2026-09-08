@@ -471,10 +471,10 @@ describe("the ladder end to end, on real challenges", () => {
       fp.parse("0.00"),
     );
     // Nansen at $0.05, CoinMarketCap and The Graph at $0.01 each.
-    // 0.095: Nansen 0.05, the second price 0.01, the subgraph 0.01, plus the
-    // three OpenPulse steps at 0.01 + 0.01 + 0.005. Every one of them is a
-    // question this run did not need to ask, and the receipt names each.
-    expect(fp.format(saved)).toBe("0.095");
+// 0.08: Nansen 0.05, the second price 0.01, the subgraph 0.01, plus the
+    // one OpenPulse step Telt actually buys -- safety, at 0.01. Each is a
+    // question this run did not need to ask, and the receipt names every one.
+    expect(fp.format(saved)).toBe("0.08");
   });
 
   it("keeps every recipe step reachable by an adapter", async () => {
