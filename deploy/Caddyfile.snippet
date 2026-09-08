@@ -1,0 +1,53 @@
+# Telt's site block, to be appended to the Caddyfile that already runs on this
+# host — `/home/ubuntu/nock/Caddyfile`.
+#
+# Telt does not bring its own reverse proxy. That host already has one serving
+# nock.lat, and two containers cannot both bind 443, so a second Caddy would
+# simply fail to start. Sharing also means one certificate store and one place
+# where the public surface of the machine is written down.
+#
+# `telt-mcp` resolves because Telt's compose joins the `nock_default` network,
+# the same one this Caddy is on. Neither container publishes a port to the host:
+# Caddy reaches Telt over the Docker network, and nothing else can.
+#
+# After appending this, reload without dropping connections:
+#
+#   docker exec nock-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+#
+# DNS must resolve first. Caddy asks Let's Encrypt for a certificate on load,
+# and that fails — noisily, and against a rate limit — if mcp.telt.site does not
+# yet point at this machine.
+
+mcp.telt.site {
+	encode zstd gzip
+
+	# Streamable HTTP holds a response open while the server writes, so
+	# buffering must be off and the timeouts must outlast a slow research call
+	# rather than cutting one off mid-payment.
+	handle /mcp* {
+		reverse_proxy telt-mcp:8790 {
+			flush_interval -1
+			transport http {
+				read_timeout 120s
+				write_timeout 120s
+			}
+		}
+	}
+
+	handle /health {
+		reverse_proxy telt-mcp:8790
+	}
+
+	# Everything else is closed. The endpoint is an MCP server and a health
+	# check; anything else answering here would be a surface nobody designed.
+	handle {
+		respond "Telt. The MCP endpoint is /mcp." 404
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+}

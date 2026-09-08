@@ -16,8 +16,10 @@
 #                 Agent OS token gets their own account and their own database.
 #                 If this container were breached tomorrow, the attacker would
 #                 hold nothing worth having.
-#   caddy         TLS. It gets and renews certificates on its own, which is one
-#                 fewer thing to debug at three in the morning.
+# TLS is somebody else's job. This host already runs a Caddy for nock.lat, and
+# two containers cannot both bind 443 — so Telt joins that network and gets one
+# site block added to the existing Caddyfile rather than bringing a second
+# reverse proxy that would fail to start.
 #
 # The .env file beside this compose file supplies the daemon's secrets. It is
 # never baked into an image and never committed.
@@ -53,7 +55,9 @@ services:
     restart: unless-stopped
     command: ["node", "apps/telt/dist/serve.js"]
     environment:
-      TELT_HTTP_PORT: "8787"
+      # 8787 belongs to nock's watcher on this host. Ports are a property of the
+      # machine, not of this project.
+      TELT_HTTP_PORT: "8790"
       TELT_TENANT_DIR: /data/tenants
       TELT_MODE: live
       # Every trading limit still applies to a caller using their own token.
@@ -73,7 +77,12 @@ services:
     volumes:
       - telt-tenants:/data
     expose:
-      - "8787"
+      - "8790"
+    networks:
+      # The shared network the existing Caddy is on, so it can reach this
+      # container by name without either of them publishing a port.
+      - default
+      - nock
     deploy:
       resources:
         limits:
@@ -82,31 +91,19 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8790/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
 
-  caddy:
-    image: caddy:2.8-alpine
-    container_name: telt-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - telt-mcp
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
-
 volumes:
   telt-state:
   telt-tenants:
-  caddy-data:
-  caddy-config:
+
+networks:
+  nock:
+    # Created by the nock stack. External so that stopping Telt never removes a
+    # network another project's containers are sitting on.
+    external: true
+    name: nock_default

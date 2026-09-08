@@ -88,7 +88,9 @@ jobs:
             # this a success. A deploy that reports green while the container
             # is crash-looping is worse than one that fails.
             for i in $(seq 1 30); do
-              if curl -fsS --max-time 3 http://127.0.0.1:8787/health > /dev/null 2>&1; then
+              # Through the container network, since neither container
+              # publishes a port to the host any more.
+              if docker compose exec -T telt-mcp node -e "fetch('http://127.0.0.1:8790/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" > /dev/null 2>&1; then
                 echo "endpoint healthy after ${i}s"
                 exit 0
               fi
