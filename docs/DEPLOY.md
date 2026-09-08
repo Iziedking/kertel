@@ -1,169 +1,173 @@
-# Running Telt on a server
+# Deploying Telt
 
-Telt on a laptop only manages positions while the laptop is on. A stdio MCP
-server is a child process of the client, so closing Claude Code closes the
-monitor with it. On a server you run the daemon instead, and it keeps acting
-while you sleep.
+Two things get deployed, to two places, for a reason.
 
-Two processes, one database:
+**The agent** goes on your VPS. It holds credentials and manages positions, so
+it needs a machine that stays up and a database that outlives every release.
 
-| Process | What it is for | Where it runs |
-| --- | --- | --- |
-| `telt-daemon` | Watches positions, fires exits, settles verdicts | The server, always |
-| `telt-mcp` | How you talk to Telt from Claude Code | Your machine, when you want it |
+**The site** goes on Vercel. It holds nothing, and putting a marketing page on
+the same host as a trading key buys you nothing but a larger blast radius.
 
-They share the SQLite file through WAL mode. The daemon does the acting; the
-MCP server does the asking.
+Neither deploy needs anyone to open a terminal after the first time.
 
-## The .env a server needs
+---
 
-Everything below goes in a `.env` file next to `docker-compose.yml`. It is never
-baked into the image and never committed.
+## 1. DNS
+
+Two records, doing different jobs.
+
+| Name | Type | Value | Serves |
+| --- | --- | --- | --- |
+| `telt.site` | as Vercel instructs | Vercel | The site and the verifier |
+| `mcp.telt.site` | `A` | your VPS IP | The MCP endpoint |
+
+`mcp.telt.site` must resolve **before** the first deploy. Caddy asks Let's
+Encrypt for a certificate on startup, and that fails if the name does not point
+at the machine answering the challenge.
+
+Check it before you go further:
 
 ```bash
-# --- Mode. Both of these, or nothing is placed. -----------------------------
-TELT_MODE=live
-TELT_LIVE_EXECUTION=true
-
-# --- Where state lives. Must be the mounted volume. -------------------------
-# Losing this loses every armed plan, every high-water mark, and the record of
-# what has already been sold. The compose file mounts a named volume at /data.
-TELT_DATA_DIR=/data
-TELT_LOG_LEVEL=info
-
-# --- Owner. --------------------------------------------------------------
-# Telt refuses every command without one. E.164.
-TELT_OWNER_WHATSAPP=+2348067053854
-
-# --- Execution: Binance Agent OS. ------------------------------------------
-# A bearer token with a thirty-day life and no refresh grant. Orders placed
-# with it land in the Agentic sub-account, which has no withdrawal scope to
-# grant at all.
-#
-# To get it: connect the MCP server to any supported client, complete the
-# browser sign-in once, and copy the token the client stored.
-#
-#   claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
-#
-# In Claude Code it lands in ~/.claude/.credentials.json under mcpOAuth.
-TELT_BINANCE_MCP_TOKEN=
-
-# --- Execution fallback: a Binance API key. --------------------------------
-# Optional. Used only when the Agent OS token is absent or has lapsed, so a
-# server whose token expired can still manage open positions.
-# Create it with Reading and Spot Trading on and WITHDRAWALS OFF.
-TELT_BINANCE_API_KEY=
-TELT_BINANCE_API_SECRET=
-
-# --- Research payments over x402. ------------------------------------------
-# A separate EVM key. Telt refuses to start if this equals the exchange key:
-# the research wallet spends cents, the exchange key moves the trading balance,
-# and one leak must not be both.
-#
-# Fund the same address with a few dollars of USDC on Base, or U on BNB Smart
-# Chain to route through Binance's own B402 rail. Payments are gasless.
-TELT_X402_PRIVATE_KEY=
-TELT_X402_RAIL=auto
-TELT_X402_MAX_PER_CALL_USDC=0.06
-TELT_X402_MAX_PER_RUN_USDC=0.10
-TELT_X402_MAX_PER_DAY_USDC=2.00
-
-# --- Trading limits. -------------------------------------------------------
-TELT_ALLOWED_SYMBOLS=ETHUSDT,BTCUSDT
-TELT_MAX_TRADE_NOTIONAL=25
-TELT_MAX_DAILY_LOSS=50
-TELT_MAX_SLIPPAGE_BPS=50
-TELT_PROPOSAL_TTL_SECONDS=120
+dig +short mcp.telt.site      # must print your VPS IP
 ```
 
-An unset variable disables its own feature and says so in `telt_status`. A
-variable that is set but malformed is a startup error naming the variable,
-because an operator who typed `TELT_MAX_TRADE_NOTIONAL=fifty` believes a limit
-is in force that is not.
+---
 
-## Deploy
+## 2. The VPS, once
+
+Everything after this is automatic. Run these once, as a user in the `docker`
+group.
 
 ```bash
-git clone https://github.com/Iziedking/telt.git
-cd telt
+# Docker, if it is not already there
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker "$USER"    # log out and back in
 
+# The repository
+git clone https://github.com/Iziedking/kertel.git ~/telt
+cd ~/telt
+
+# Your secrets. Never committed, never in an image.
 cp .env.example .env
-$EDITOR .env                 # fill in the values above
-
-docker compose up -d --build
-docker compose logs -f
-```
-
-The first lines tell you whether it will actually trade:
-
-```json
-{"msg":"telt daemon starting","mode":"live","executionRail":"agent-os","liveExecution":true}
-{"msg":"monitor started","intervalMs":30000}
-```
-
-If it says `"mode":"fixture"` or `"executionRail":"none"`, it will journal what
-it *would* have done and place nothing. The `degraded` array on that same line
-names the missing piece.
-
-Every fifteen minutes it logs proof of life:
-
-```json
-{"msg":"alive","managing":1,"symbols":["ETHUSDT"],"killSwitch":false}
-```
-
-Without that, a wedged daemon and a quiet market look identical in a log, and
-the first you hear of it is a stop that never fired.
-
-## Talking to it from your machine
-
-The daemon has no port and accepts no input. To ask it things, point a local MCP
-server at the same database. The simplest arrangement is to keep the daemon on
-the server and run the MCP server locally against a copy of the state carried
-over with `telt_snapshot` and `telt_restore`.
-
-If you want one database serving both, put the MCP server on the same host and
-reach it over SSH:
-
-```bash
-claude mcp add telt-remote -- ssh user@your-vps \
-  "TELT_DATA_DIR=/var/lib/telt node /opt/telt/apps/telt/dist/mcp.js"
-```
-
-That works because stdio is just a pipe, and SSH is a pipe. Both processes then
-share one SQLite file in WAL mode.
-
-## When the token expires
-
-Thirty days, and Binance advertises no refresh grant. When it lapses the daemon
-refuses with `EXECUTION_ADAPTER_UNAVAILABLE` naming the expiry rather than
-failing obscurely. Sign in again, copy the new token, and restart:
-
-```bash
 $EDITOR .env
-docker compose up -d
+chmod 600 .env
 ```
 
-Positions survive: they are in the volume, not the container.
+Fill in `.env` from `.env.example`. The four that matter:
 
-## Backups
+- `TELT_BINANCE_MCP_TOKEN` — your Agent OS token. Thirty days, then one browser
+  sign-in to replace it.
+- `TELT_X402_PRIVATE_KEY` — the research wallet. It holds a few dollars and it
+  signs your proofs of research. **It must not be the same secret as anything
+  that can move your trading balance**; Telt refuses to start if it is.
+- `TELT_MODE=live` and `TELT_LIVE_EXECUTION=true` — both, or no order is sent.
 
-The volume is the whole of Telt's memory of what it is managing.
+Then:
 
 ```bash
-docker compose exec telt node -e "process.stdout.write('')"   # ensure it is up
-docker run --rm -v telt_telt-state:/data -v "$PWD:/out" \
-  busybox tar czf /out/telt-state-$(date +%F).tar.gz -C /data .
+docker compose up -d --build
+docker compose ps
+curl -fsS https://mcp.telt.site/health
 ```
 
-Or take a `telt_snapshot` from the MCP server and store it in your memory
-service, which is portable across machines rather than tied to this one.
+`{"ok":true,"tenants":0}` means you are done.
 
-## What this does not do
+### What is actually running
 
-The daemon exposes no network service. It cannot be reached from a phone, a
-browser, or another machine, and it holds no port open. Talking to Telt needs
-the MCP server, which is stdio only.
+```
+telt-daemon    your agent. Your token, your positions, no open port at all.
+telt-mcp       the public endpoint. NO credentials of yours, by design.
+caddy          TLS, renewed automatically.
+```
 
-Remote access over HTTP with its own authentication is not built. Until it is,
-"trade from my phone" means Claude Code on a machine that can reach the same
-database, not a public endpoint.
+That split is a security boundary, not tidiness. `telt-mcp` is the container
+strangers talk to, and it is configured with an empty exchange token and an
+empty research wallet. Anonymous callers can verify proofs and read markets.
+A caller who brings their own Agent OS token in `X-Telt-Binance-Token` gets
+their own account and their own database, keyed by a hash of the token so the
+filename leaks nothing. **If that container were breached tomorrow the attacker
+would hold nothing worth having** — which is the only sentence that makes a
+public trading endpoint defensible at all.
+
+---
+
+## 3. CI/CD
+
+Push to `main` and the rest happens.
+
+`.github/workflows/deploy.yml` runs the full suite first, builds the image to
+catch a Dockerfile mistake in CI rather than halfway through production, then
+SSHes in, pulls, rebuilds and waits for `/health` to answer before calling the
+deploy green. A deploy that reports success while the container crash-loops is
+worse than one that fails.
+
+Add these under **Settings → Secrets and variables → Actions**:
+
+| Secret | What it is |
+| --- | --- |
+| `VPS_HOST` | The IP or hostname |
+| `VPS_USER` | The user that owns `~/telt` and is in the `docker` group |
+| `VPS_SSH_KEY` | A **private** key whose public half is in that user's `authorized_keys` |
+| `VPS_PORT` | Usually `22` |
+| `VPS_APP_DIR` | `/home/<user>/telt` |
+
+Make a key for this and nothing else, so it can be revoked without disturbing
+your own access:
+
+```bash
+ssh-keygen -t ed25519 -C "telt-deploy" -f ~/.ssh/telt_deploy -N ""
+ssh-copy-id -i ~/.ssh/telt_deploy.pub <user>@<host>
+cat ~/.ssh/telt_deploy        # this is VPS_SSH_KEY
+```
+
+The daemon is **replaced, not torn down**: `compose up -d` recreates only what
+changed, and the named volume carries every armed plan, every high-water mark
+and the record of what has already been sold across the release. Losing that
+volume loses all of it, so `docker compose down -v` is the one command to be
+careful with.
+
+---
+
+## 4. The site
+
+Import the repository into Vercel and set the root directory to `web`. Every
+push to `main` that touches `web/` redeploys it.
+
+One environment variable, and only if your endpoint is not the default:
+
+```
+NEXT_PUBLIC_TELT_MCP=https://mcp.telt.site/mcp
+```
+
+The verifier calls that endpoint from the reader's browser — the same endpoint
+anyone can point their own client at. It has no private route to the truth,
+which is the point: a proof only checkable on the prover's own website is worth
+very little.
+
+---
+
+## Operating it
+
+```bash
+docker compose logs -f telt-daemon      # what the agent is doing
+docker compose logs -f telt-mcp         # who is calling the endpoint
+docker compose restart telt-daemon      # after an .env change
+docker compose down                     # stop; positions and volume survive
+```
+
+**When the Agent OS token expires** — thirty days, no refresh grant — the
+daemon starts saying so rather than failing quietly. Sign in again, replace
+`TELT_BINANCE_MCP_TOKEN` in `.env`, and `docker compose restart telt-daemon`.
+
+**Back up the volume** before anything you are unsure about:
+
+```bash
+docker run --rm -v telt-state:/data -v "$PWD:/out" alpine \
+  tar czf /out/telt-state-$(date +%F).tar.gz -C /data .
+```
+
+**If the endpoint stops answering**, the healthcheck restarts the container on
+its own. If it keeps happening, `docker compose logs --tail 100 telt-mcp` will
+say why, and the daemon is unaffected either way — they are separate processes
+holding separate databases, which is most of the reason they are separate
+containers.

@@ -1,0 +1,110 @@
+# Test, then deploy.
+#
+# The order is the point. This agent moves real money, so nothing reaches the
+# server that has not first passed the whole suite — including the tests that
+# pin the refusals, the reduce-only exits, and the forgery detection. A deploy
+# job that does not depend on a green check job is a deploy job that will
+# eventually ship a broken stop-loss.
+#
+# The VPS is reached over SSH with a deploy key held in repository secrets, so
+# no human needs shell access for a routine release and no laptop needs to be
+# awake for one.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "fixtures/**"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "deploy/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch: {} # a redeploy by hand, from the Actions tab
+
+concurrency:
+  # One deploy at a time. Two overlapping `compose up` runs on the same host is
+  # how a container ends up half-replaced.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Typecheck, lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Pinned to the same minor the image runs. node:sqlite is still
+          # experimental, and testing on a different minor than production
+          # would defeat the point of pinning the image.
+          node-version: "22.17"
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Check
+        run: npm run check
+
+      - name: Build the image
+        # Built here as well as on the server, so a Dockerfile mistake fails in
+        # CI rather than halfway through a production deploy.
+        run: docker build -t telt:ci .
+
+  deploy:
+    name: Deploy to the VPS
+    needs: check
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.VPS_APP_DIR }}
+
+            git fetch --all
+            git reset --hard origin/main
+
+            # The daemon holds live positions, so it is replaced rather than
+            # torn down: `up -d` recreates only what changed, and the named
+            # volume carries every armed plan and high-water mark across.
+            docker compose up -d --build
+
+            # Wait for the public endpoint to actually answer before calling
+            # this a success. A deploy that reports green while the container
+            # is crash-looping is worse than one that fails.
+            for i in $(seq 1 30); do
+              if curl -fsS --max-time 3 http://127.0.0.1:8787/health > /dev/null 2>&1; then
+                echo "endpoint healthy after ${i}s"
+                exit 0
+              fi
+              sleep 1
+            done
+
+            echo "the endpoint did not become healthy; showing recent logs" >&2
+            docker compose logs --tail 60 telt-mcp >&2
+            exit 1
+
+      - name: Reclaim disk
+        # Old images accumulate until a small VPS runs out of room mid-deploy.
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: docker image prune -f

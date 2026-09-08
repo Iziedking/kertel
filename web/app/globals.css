@@ -1,0 +1,345 @@
+/* Telt design system, carried over from the brand and pointed at trading.
+   Light by default; dark under [data-theme="dark"]. Editorial rather than
+   dashboard-y: a calm canvas, one display heading, and the numbers set in mono
+   so they read as machine-real. Boldness is spent on Signal red and nothing
+   else. No glass, no gradient, no drift. */
+
+:root {
+  /* Constants */
+  --ink: #14181f;
+  --cream: #f4f1ea;
+  --signal: #c4241c;
+  --sand: #f1e7ce;
+  --felt: #a8e0c2;
+  --peri: #c7c9f2;
+  --sky: #bfe0f2;
+
+  /* Themed (light default) */
+  --bg: #eef1f5;
+  --text: #14181f;
+  --dim: #59636f;
+  --line: rgba(20, 24, 31, 0.12);
+  --surface: #ffffff;
+  --panel: #14181f;
+
+  --radius: 20px;
+  --gap: 20px;
+}
+
+[data-theme="dark"] {
+  --bg: #14181f;
+  --text: #f4f1ea;
+  --dim: #8b94a0;
+  --line: rgba(244, 241, 234, 0.13);
+  --surface: #1b212c;
+  --panel: #0f1318;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+.dim {
+  color: var(--dim);
+}
+a {
+  color: inherit;
+}
+
+/* --- Navigation --- */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 30px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.wordmark {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.wordmark .wm-accent {
+  color: var(--signal);
+}
+.nav-links {
+  display: flex;
+  gap: 28px;
+  flex: 1;
+  justify-content: center;
+}
+.nav-links a {
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.nav-links a:hover {
+  color: var(--text);
+}
+.theme-toggle {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--sand);
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+/* --- Layout --- */
+
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 30px;
+}
+.hero {
+  padding: 88px 0 56px;
+}
+.display {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  font-size: clamp(38px, 6.2vw, 68px);
+  line-height: 1.03;
+  letter-spacing: -0.02em;
+  margin: 0 0 24px;
+  max-width: 15ch;
+}
+.display .accent {
+  color: var(--signal);
+}
+.lede {
+  font-size: 19px;
+  line-height: 1.55;
+  max-width: 62ch;
+  color: var(--dim);
+  margin: 0 0 18px;
+}
+.eyebrow {
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--signal);
+  margin: 0 0 18px;
+}
+h2 {
+  font-family: var(--font-display), sans-serif;
+  font-size: 30px;
+  letter-spacing: -0.01em;
+  margin: 0 0 18px;
+}
+h3 {
+  font-size: 17px;
+  margin: 0 0 8px;
+}
+section {
+  padding: 46px 0;
+  border-top: 1px solid var(--line);
+}
+p {
+  line-height: 1.6;
+}
+
+/* --- Panels and cards --- */
+
+.panel {
+  background: var(--panel);
+  color: var(--cream);
+  border-radius: var(--radius);
+  padding: 30px;
+}
+.panel .dim {
+  color: rgba(244, 241, 234, 0.62);
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+.grid {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+}
+
+/* --- The proof block --- */
+
+.proof {
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--panel);
+  color: var(--cream);
+  border-radius: 14px;
+  padding: 22px;
+  overflow-x: auto;
+}
+.proof .k {
+  color: rgba(244, 241, 234, 0.5);
+}
+.proof .v {
+  color: var(--felt);
+}
+
+/* --- The verifier --- */
+
+.field {
+  width: 100%;
+  min-height: 260px;
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+.field:focus {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
+}
+.button {
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--signal);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 14px 26px;
+  cursor: pointer;
+}
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.button.ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.result {
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: 24px;
+  padding: 22px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.result.pass {
+  border-left: 4px solid var(--felt);
+}
+.result.fail {
+  border-left: 4px solid var(--signal);
+}
+
+/* --- Small pieces --- */
+
+.pill {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--sand);
+  border-radius: 999px;
+  padding: 7px 13px;
+  display: inline-block;
+}
+.snippet {
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  background: var(--panel);
+  color: var(--cream);
+  border-radius: 12px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  white-space: pre;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+th,
+td {
+  text-align: left;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+th {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+  font-weight: 400;
+}
+footer {
+  border-top: 1px solid var(--line);
+  padding: 34px 0 60px;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  .nav-links {
+    display: none;
+  }
+  .hero {
+    padding: 52px 0 34px;
+  }
+}

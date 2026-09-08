@@ -1,36 +1,112 @@
 # Telt on a VPS.
 #
-#   docker compose up -d          start the daemon
-#   docker compose logs -f        watch it work
-#   docker compose down           stop it (positions survive; the volume does not go)
+#   docker compose up -d --build   build and start everything
+#   docker compose logs -f         watch it work
+#   docker compose down            stop it (the volume, and your positions, stay)
 #
-# The .env file next to this compose file supplies every secret. It is never
-# baked into the image and never committed.
+# Three containers from two images, and the split between the first two is a
+# security boundary rather than a tidiness one:
+#
+#   telt-daemon   Your agent. Holds your Binance token and your x402 key, manages
+#                 your positions, and listens on no port at all. Nothing on the
+#                 internet can reach it.
+#   telt-mcp      The public MCP endpoint. Deliberately has NO credentials: no
+#                 exchange token, no research wallet. Anonymous callers can
+#                 verify proofs and read markets; a caller who brings their own
+#                 Agent OS token gets their own account and their own database.
+#                 If this container were breached tomorrow, the attacker would
+#                 hold nothing worth having.
+#   caddy         TLS. It gets and renews certificates on its own, which is one
+#                 fewer thing to debug at three in the morning.
+#
+# The .env file beside this compose file supplies the daemon's secrets. It is
+# never baked into an image and never committed.
 
 services:
-  telt:
+  telt-daemon:
     build: .
     image: telt:latest
-    container_name: telt
+    container_name: telt-daemon
     restart: unless-stopped
     env_file: [.env]
     environment:
       TELT_DATA_DIR: /data
     volumes:
       # Named, not bind-mounted: the database must outlive both the container
-      # and the image, and a stray `docker compose down -v` is the only thing
-      # that should ever remove it.
+      # and the image, and a stray `docker compose down -v` should be the only
+      # thing that can ever remove it.
       - telt-state:/data
-    # A trading agent has no reason to hold a machine's memory or CPU hostage.
+    # No `ports`. The daemon accepts no input; the only way to influence it is
+    # to change its database or its environment.
     deploy:
       resources:
         limits:
           memory: 512M
     logging:
       driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
+      options: { max-size: "10m", max-file: "3" }
+
+  telt-mcp:
+    build: .
+    image: telt:latest
+    container_name: telt-mcp
+    restart: unless-stopped
+    command: ["node", "apps/telt/dist/serve.js"]
+    environment:
+      TELT_HTTP_PORT: "8787"
+      TELT_TENANT_DIR: /data/tenants
+      TELT_MODE: live
+      # Every trading limit still applies to a caller using their own token.
+      TELT_MAX_TRADE_NOTIONAL: "25"
+      TELT_MAX_LEVERAGE: "3"
+      TELT_MAX_FUTURES_NOTIONAL: "50"
+      TELT_ALLOWED_SYMBOLS: "*"
+      # Explicitly empty, and explicitly NOT read from .env. A public endpoint
+      # holding the operator's exchange token would be one bug away from
+      # trading a stranger's idea on the operator's account, and one holding
+      # the research wallet would be drained within the hour.
+      TELT_BINANCE_MCP_TOKEN: ""
+      TELT_BINANCE_API_KEY: ""
+      TELT_BINANCE_API_SECRET: ""
+      TELT_X402_PRIVATE_KEY: ""
+      TELT_LIVE_EXECUTION: "false"
+    volumes:
+      - telt-tenants:/data
+    expose:
+      - "8787"
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: telt-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - telt-mcp
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
 volumes:
   telt-state:
+  telt-tenants:
+  caddy-data:
+  caddy-config:

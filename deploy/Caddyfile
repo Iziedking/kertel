@@ -1,0 +1,39 @@
+# TLS for the public Telt endpoint.
+#
+# Caddy gets and renews the certificate itself, which is the whole reason it is
+# here: a trading agent's deploy should not also be a certbot cron job you find
+# out about when it lapses.
+#
+# Only mcp.telt.site is served here. telt.site itself is the marketing site and
+# lives on Vercel, so the agent host never terminates traffic for it.
+
+mcp.telt.site {
+	encode zstd gzip
+
+	# The MCP endpoint. Streamable HTTP holds a response open while the server
+	# writes, so the read timeout has to outlast a slow research call rather
+	# than cutting one off mid-payment.
+	reverse_proxy telt-mcp:8787 {
+		flush_interval -1
+		transport http {
+			read_timeout 120s
+			write_timeout 120s
+		}
+	}
+
+	header {
+		# The endpoint is an API, not a page. Nothing here should be framed,
+		# sniffed, or leak a referrer to a provider.
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+		# Never the token header. It is a bearer credential for somebody's
+		# exchange account, and an access log is the easiest place to leak one.
+		}
+}

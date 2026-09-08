@@ -1,6 +1,11 @@
 node_modules
 **/node_modules
 **/dist
+# Incremental build state. Without this the host's .tsbuildinfo is copied in,
+# tsc concludes everything is already built, and emits nothing — producing an
+# image whose dist directories do not exist. It fails at COPY, which is lucky;
+# a slightly different Dockerfile would have shipped an empty image.
+**/*.tsbuildinfo
 .git
 .env
 .env.*
@@ -10,3 +15,4 @@ data
 *.log
 .codex
 .claude
+web

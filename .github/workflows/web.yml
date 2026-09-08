@@ -1,0 +1,38 @@
+# The marketing site and the verifier.
+#
+# Separate from the agent's pipeline on purpose: a copy change to the landing
+# page has no business rebuilding a container that holds live positions, and a
+# broken build here must never block a fix to the trading path.
+#
+# Deployment itself is Vercel's, triggered by the push. This job exists to fail
+# loudly first, because Vercel will happily deploy a page whose verifier is
+# broken.
+
+name: Web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/web.yml"
+  pull_request:
+    paths:
+      - "web/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.17"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npx tsc --noEmit
+      - run: npm run build

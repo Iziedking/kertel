@@ -188,6 +188,29 @@ export function createHttpServer(options: HttpServerOptions): Server {
     void (async () => {
       const url = new URL(request.url ?? "/", "http://localhost");
 
+      // Any origin, deliberately.
+      //
+      // Verification has to work from a page the verifier trusts, which is not
+      // necessarily one of ours — a proof only checkable on the prover's own
+      // website is worth very little. Allowing this is safe here because
+      // authentication is a custom header and never a cookie: a browser will
+      // not attach a token to a cross-origin request on its own, so there is no
+      // ambient authority for a hostile page to borrow.
+      response.setHeader("access-control-allow-origin", "*");
+      response.setHeader("access-control-allow-headers", `content-type, accept, ${TOKEN_HEADER}, mcp-session-id, mcp-protocol-version`);
+      response.setHeader("access-control-allow-methods", "POST, OPTIONS");
+      response.setHeader("access-control-expose-headers", "mcp-session-id");
+      response.setHeader("access-control-max-age", "86400");
+
+      if (request.method === "OPTIONS") {
+        // The preflight every non-trivial POST triggers. Answered before any
+        // routing, so a client learns it may proceed without a round trip into
+        // the runtime.
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+
       // A liveness check that says nothing about anybody's account.
       if (url.pathname === "/health") {
         send(response, 200, { ok: true, tenants: tenants.size });

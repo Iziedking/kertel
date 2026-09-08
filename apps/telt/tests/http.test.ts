@@ -159,6 +159,36 @@ describe("what a stranger must not reach", () => {
   });
 });
 
+describe("reachable from a browser", () => {
+  it("answers the preflight a cross-origin POST triggers", async () => {
+    // Without this the verify page fails in a browser and works in curl, which
+    // is the most annoying possible way to find out.
+    const response = await fetch(`${base}/mcp`, {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://telt.site",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(response.headers.get("access-control-allow-methods")).toContain("POST");
+  });
+
+  it("allows any origin, because a proof only checkable on our own site is worth little", async () => {
+    const response = await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {
+        protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "browser", version: "0" },
+      } }),
+    });
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+  });
+});
+
 describe("keeping callers apart", () => {
   it("gives two tokens two databases, and neither is named after a token", async () => {
     await callTool("telt_status", {}, ALPHA);
