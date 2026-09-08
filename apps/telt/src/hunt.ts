@@ -39,6 +39,7 @@ import type { Instant, Symbol_ } from "@telt/core/domain";
 import { actionable, amountAtRisk, evaluateSpend, remaining } from "@telt/core/autonomy";
 import type { DiscretionaryBudget, Verdict } from "@telt/core/autonomy";
 import { rankMovers } from "@telt/core/research";
+import { hasPaidCoverage } from "@telt/providers";
 import type { Mover } from "@telt/core/research";
 
 import type { BinanceClient } from "./infra/binance.js";
@@ -153,12 +154,18 @@ export async function hunt(deps: HuntDeps): Promise<HuntOutcome> {
     limit: 10,
   });
 
-  const candidate = pickCandidate(deps, ranked.gainers, now);
+  const { candidate, skippedUncovered } = pickCandidate(deps, ranked.gainers, now);
   if (candidate === null) {
-    note(deps, null, "Looked and found nothing", `${String(ranked.liquid)} liquid pairs, none worth paying to research.`);
+    const why =
+      skippedUncovered > 0
+        ? `${String(skippedUncovered)} of the movers have no verified provider id, so the only price available for them is Binance's own. Telt will not act on one uncorroborated source.`
+        : "Everything moving is either already held or was looked at recently.";
+    note(deps, null, "Looked and found nothing", why);
     return {
       acted: false,
-      body: `Looked at ${String(ranked.liquid)} liquid pairs. Nothing worth researching: everything moving is either already held or was looked at recently.`,
+      body: `Looked at ${String(ranked.liquid)} liquid pairs and did not act.
+
+  ${why}`,
     };
   }
 
@@ -171,7 +178,22 @@ export async function hunt(deps: HuntDeps): Promise<HuntOutcome> {
   }
 
   // --- 4. What does it support? ----------------------------------------
-  const judged = await deps.model.judge({ symbol: candidate.symbol, evidence: evidence.body });
+  // What the model is shown is the facts, and only the facts.
+  //
+  // Telt's receipt is written for a person: it explains why each source was
+  // worth buying and frames the ones it skipped as money saved. That is useful
+  // to a reader deciding whether to trust the agent, and it is steering to one
+  // being asked to judge impartially — the model flagged it twice, once as an
+  // attestation "trying to lend false authority to a no-data decision" and once
+  // as "framing language that could be seen as trying to steer interpretation
+  // toward action". Both were fair.
+  //
+  // So the proof block goes, the rationale goes, and the savings go. What
+  // survives is the sources, their values, and any warning about what could not
+  // be read — which is the part a decision should actually rest on.
+  const forModel = evidenceOnly(evidence.body);
+
+  const judged = await deps.model.judge({ symbol: candidate.symbol, evidence: forModel });
   if (!judged.ok) {
     note(deps, candidate.symbol, `No verdict on ${candidate.symbol}`, judged.error.detail);
     return { acted: false, body: `${candidate.symbol}: ${judged.error.detail}` };
@@ -278,16 +300,38 @@ type Candidate = { readonly symbol: Symbol_; readonly changeBps: number; readonl
  * recently, because re-buying the same evidence every half hour is how it
  * quietly spends a research budget.
  */
-function pickCandidate(deps: HuntDeps, gainers: readonly Mover[], now: Instant): Candidate | null {
+function pickCandidate(
+  deps: HuntDeps,
+  gainers: readonly Mover[],
+  now: Instant,
+): { readonly candidate: Candidate | null; readonly skippedUncovered: number } {
   const managed = new Set(deps.store.mandates.active().map((mandate) => mandate.symbol as string));
+  let skippedUncovered = 0;
 
   for (const mover of gainers) {
     if (managed.has(mover.symbol as string)) continue;
+
     const lastLooked = deps.store.autonomy.lastLooked(mover.symbol);
     if (lastLooked !== null && now - lastLooked < RECONSIDER_AFTER_MS) continue;
-    return { symbol: mover.symbol, changeBps: mover.changeBps, volume: mover.quoteVolume };
+
+    // No paid provider has a verified id for this, so the only price available
+    // is the venue's own. A single uncorroborated source can never clear the
+    // confidence floor -- the reasoning layer will say so, correctly, every
+    // time -- so looking is a guaranteed no with an API call attached.
+    //
+    // This is also the honest signal about where Telt's limit actually is: not
+    // the reasoning, the coverage.
+    if (!hasPaidCoverage(mover.symbol)) {
+      skippedUncovered += 1;
+      continue;
+    }
+
+    return {
+      candidate: { symbol: mover.symbol, changeBps: mover.changeBps, volume: mover.quoteVolume },
+      skippedUncovered,
+    };
   }
-  return null;
+  return { candidate: null, skippedUncovered };
 }
 
 /** The whole per-idea cap, or what is left if that is less. */
@@ -343,3 +387,46 @@ function renderActed(
 }
 
 export { DEFAULT_MIN_VOLUME };
+
+/**
+ * Strip a receipt down to what was actually read.
+ *
+ * Keeps the sources and their values, and keeps every warning, because "this
+ * could not be corroborated" is evidence of the most important kind. Drops the
+ * proof block, the per-source rationale and the not-read accounting, all of
+ * which exist to explain Telt's behaviour to a person rather than to describe
+ * the asset.
+ */
+function evidenceOnly(receipt: string): string {
+  const lines = receipt.split("\n");
+  const kept: string[] = [];
+  let skipping = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Sections that are about Telt rather than about the token.
+    if (
+      trimmed.startsWith("Not read:") ||
+      trimmed.startsWith("Proof of research") ||
+      trimmed.startsWith("Not spent:") ||
+      trimmed.startsWith("Verify with") ||
+      trimmed.startsWith("TELT-ATTESTATION-1")
+    ) {
+      skipping = true;
+      continue;
+    }
+    // A blank line ends a skipped section, unless the attestation has begun —
+    // that block runs to the end.
+    if (skipping) {
+      if (trimmed === "" && !kept.some((k) => k.includes("TELT-ATTESTATION"))) {
+        skipping = false;
+      }
+      continue;
+    }
+
+    kept.push(line);
+  }
+
+  return kept.join("\n").trim();
+}

@@ -137,14 +137,47 @@ describe("the registry", () => {
 
 describe("the instrument table", () => {
   it("is closed: an unknown symbol has no ids to build a request from", () => {
-    expect(instrumentFor("DOGEUSDT" as Symbol_)).toBeUndefined();
+    // A symbol nobody has mapped. Telt still trades it -- the exchange decides
+    // what is listed -- but every paid provider refuses it by name rather than
+    // guessing an id.
+    expect(instrumentFor("NOTAREALTOKENUSDT" as Symbol_)).toBeUndefined();
+    // Case matters. Symbols are uppercase everywhere, and a lowercase lookup
+    // silently succeeding would let two spellings mean two different things.
     expect(instrumentFor("ethusdt" as Symbol_)).toBeUndefined();
   });
 
-  it("gives every instrument a positive CoinMarketCap id, since the request is keyed by it", () => {
+  it("gives every instrument at least one verified paid source", () => {
+    // An entry with no provider id at all would be indistinguishable from an
+    // unmapped symbol while looking mapped, which is the worst of both.
     for (const entry of INSTRUMENTS) {
+      const hasAny =
+        entry.coingeckoId !== null ||
+        entry.coinmarketcapId !== null ||
+        entry.nansenTokenAddresses.length > 0;
+      expect(hasAny).toBe(true);
+    }
+  });
+
+  it("keeps a CoinMarketCap id positive where one exists, since the request is keyed by it", () => {
+    // Most instruments carry a CoinGecko id only. That is a real state, not a
+    // gap: two independent prices is what corroboration needs, and CoinMarketCap
+    // then refuses by name on the receipt rather than being guessed at.
+    for (const entry of INSTRUMENTS) {
+      if (entry.coinmarketcapId === null) continue;
       expect(Number.isInteger(entry.coinmarketcapId)).toBe(true);
       expect(entry.coinmarketcapId).toBeGreaterThan(0);
+    }
+  });
+
+  it("has a CoinGecko id for every symbol added by resolution", () => {
+    // The rule that made those additions safe: exactly one CoinGecko entry
+    // matched both ticker and canonical name, and that id then returned a live
+    // price. Anything ambiguous was left out rather than picked.
+    const resolved = INSTRUMENTS.filter((entry) => entry.coinmarketcapId === null);
+    expect(resolved.length).toBeGreaterThan(0);
+    for (const entry of resolved) {
+      expect(entry.coingeckoId).not.toBeNull();
+      expect(entry.coingeckoId).not.toBe("");
     }
   });
 
