@@ -81,6 +81,12 @@ export function buildServer(runtime: Runtime): McpServer {
         '- "buy me $20 of X" / "get me some X" / "long X at 3x"',
         "    -> telt_propose (or telt_futures_open). Show the numbers. Stop. Wait for their code.",
         "      They have decided; do not research unprompted, but do say if you have no evidence.",
+        '- "protect my X" / "hedge my X" / "reduce my X risk"',
+        "    -> telt_hedge. It reads the actual Spot holding and proposes a matching isolated short.",
+        "      Show both legs and wait for the code. It works for any USDT pair listed on both Spot",
+        "      and USD-M Futures. Never claim a Spot-only token can be hedged by this version.",
+        '- "how protected is my X" / "is my hedge balanced" -> telt_hedge_status.',
+        '- "remove my X protection" / "unhedge X" -> telt_futures_close with the full fraction.',
         '- "how am I doing" / "what am I holding" / "any risks" / "should I worry"',
         "    -> telt_watch, then telt_positions. Lead with anything unprotected or near a stop.",
         "      For a futures position always state how far liquidation is.",
@@ -817,6 +823,66 @@ export function buildServer(runtime: Runtime): McpServer {
   );
 
   // ---- Futures. Leveraged, so every guard is tighter. -----------------------
+
+  server.registerTool(
+    "telt_hedge",
+    {
+      title: "Protect a Spot holding",
+      description:
+        "Turn a plain request such as 'protect my SOL' into a reviewable one-symbol hedge. " +
+        "Reads the account's actual Spot balance, proves the USDT pair trades on both Binance Spot " +
+        "and USD-M Futures, calculates the requested coverage, checks Futures margin and Telt's " +
+        "limits, then proposes an isolated short. Does not trade. The returned one-use code must " +
+        "be typed by the human and passed to telt_futures_confirm. Works for any matching pair, " +
+        "including BTCUSDT, ETHUSDT, BNBUSDT, and SOLUSDT, rather than a fixed token list.",
+      inputSchema: {
+        symbol: z
+          .string()
+          .describe("USDT pair to protect, for example SOLUSDT."),
+        coverageBps: z
+          .number()
+          .int()
+          .min(1)
+          .max(10000)
+          .default(10000)
+          .describe("10000 protects all of the Spot holding; 5000 protects half."),
+        leverage: z
+          .number()
+          .int()
+          .min(1)
+          .default(2)
+          .describe("Isolated Futures leverage. Telt enforces its configured ceiling."),
+      },
+    },
+    async ({ symbol, coverageBps, leverage }) =>
+      guard(async () => {
+        const result = await runtime.proposeHedge({
+          symbol,
+          coverageBps,
+          leverage,
+        });
+        return text(result.body, !result.ok);
+      }),
+  );
+
+  server.registerTool(
+    "telt_hedge_status",
+    {
+      title: "Read Spot hedge status",
+      description:
+        "Read one Spot holding and its matching USD-M Futures position as a single protection view. " +
+        "Reports Spot quantity, short quantity, coverage, net asset exposure, and Futures PnL. " +
+        "Use after confirmation, when the user asks how protected they are, or before removing a hedge.",
+      inputSchema: {
+        symbol: z.string().describe("USDT pair to check, for example BTCUSDT."),
+      },
+    },
+    async ({ symbol }) =>
+      guard(async () => {
+        const result = await runtime.describeHedge(symbol);
+        return text(result.body, !result.ok);
+      }),
+  );
 
   server.registerTool(
     "telt_futures_open",

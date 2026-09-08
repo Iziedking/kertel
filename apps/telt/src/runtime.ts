@@ -61,6 +61,7 @@ import {
   proposeFutures,
 } from "./futures-trading.js";
 import type { FuturesDeps, FuturesOutcome } from "./futures-trading.js";
+import { describeHedge, proposeHedge } from "./hedge.js";
 import { loadFixtureExchanges } from "./infra/fixtures.js";
 import type { BinanceClient } from "./infra/binance.js";
 import { cancel, confirm, propose, reconcile } from "./trading.js";
@@ -127,6 +128,12 @@ export type Runtime = {
   confirmFutures(code: string): Promise<FuturesOutcome>;
   closeFutures(symbol: string, fractionBps: number): Promise<FuturesOutcome>;
   describeFutures(symbols: readonly string[]): Promise<string>;
+  proposeHedge(input: {
+    readonly symbol: string;
+    readonly coverageBps: number;
+    readonly leverage: number;
+  }): Promise<FuturesOutcome>;
+  describeHedge(symbol: string): Promise<FuturesOutcome>;
   research(input: ResearchRequest): Promise<ResearchResult>;
   decide(input: DecisionInput): ReturnType<typeof recordDecision>;
   propose(input: {
@@ -842,6 +849,24 @@ ${renderAttestationBlock(signed)}`;
       futuresDeps === null
         ? noFutures.body
         : describeFutures(futuresDeps, symbols),
+    proposeHedge: async (input) =>
+      futuresDeps === null
+        ? noFutures
+        : proposeHedge(
+            {
+              binance,
+              futures: futuresDeps.futures,
+              maxLeverage: config.maxLeverage,
+              maxNotional: config.maxFuturesNotional,
+              proposeFutures: (request) =>
+                proposeFutures(futuresDeps, request),
+            },
+            input,
+          ),
+    describeHedge: async (symbol) =>
+      futuresDeps === null
+        ? noFutures
+        : describeHedge({ binance, futures: futuresDeps.futures }, symbol),
     mode: config.mode,
     ownerHash,
     research,

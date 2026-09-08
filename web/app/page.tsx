@@ -10,78 +10,78 @@ export default function Home() {
             <span className="status-dot" /> BUILT WITH BINANCE AGENT OS
           </p>
           <h1>
-            Every trade
+            Tell Telt what
             <br />
-            needs a{" "}
+            to{" "}
             <span className="tell">
-              tell<span className="red">.</span>
+              protect<span className="red">.</span>
               <svg viewBox="0 0 240 18" aria-hidden="true">
                 <path d="M3 12 Q120 0 237 10" />
               </svg>
             </span>
           </h1>
           <p className="lede">
-            Meet Telt. Your Binance AI agent that researches with a budget,
-            records its reasoning, and brings you a decision you can inspect.
+            Telt reads your Binance Spot holding, calculates a matching isolated
+            Futures hedge, and waits for your approval before it acts.
           </p>
           <div className="actions">
             <Link href="#demo" className="button primary">
-              See Telt think <Icon name="arrow" />
+              Try the public agent <Icon name="arrow" />
             </Link>
             <Link href="/connect" className="button secondary">
-              Connect Telt
+              Connect via MCP
             </Link>
           </div>
           <p className="micro">
-            Research first. Your approval before an order.
+            Any USDT pair listed on both Spot and USD-M Futures.
           </p>
         </div>
         <div
           className="hero-art"
-          aria-label="Telt workflow: observe, research, decide, approve"
+          aria-label="Telt workflow: read a holding, calculate protection, approve"
         >
-          <div className="orbit-label">THE TELL, EXPLAINED</div>
+          <div className="orbit-label">PROTECTION, EXPLAINED</div>
           <div className="signal-card signal-one">
-            <span className="mono">01 / OBSERVE</span>
-            <strong>Something moved.</strong>
+            <span className="mono">01 / READ</span>
+            <strong>Your real Spot holding.</strong>
             <span className="spark" aria-hidden="true">
               ▁▂▂▅▃▅▇▆█
             </span>
           </div>
           <div className="signal-card signal-two">
-            <span className="mono">02 / INVESTIGATE</span>
-            <strong>Is it worth a closer look?</strong>
+            <span className="mono">02 / MATCH</span>
+            <strong>Size the Futures short.</strong>
             <div className="mini-tags">
-              <span>Venue price</span>
-              <span>Independent data</span>
+              <span>Spot balance</span>
+              <span>Exchange limits</span>
             </div>
           </div>
           <div className="signal-card signal-three">
-            <span className="mono">03 / DECIDE</span>
+            <span className="mono">03 / APPROVE</span>
             <strong>
-              A reason.
-              <br />A limit. A receipt.
+              Both legs.
+              <br />One clear code.
             </strong>
             <span className="round-arrow" aria-hidden="true"><Icon name="arrow" /></span>
           </div>
           <div className="art-caption">
-            A workflow you can question at every step.
+            Ask later: “How protected am I?”
           </div>
         </div>
       </div>
       <div className="feature-strip">
         <div className="wrap">
           <span>
-            <b>Binance Agent OS</b> · execution
+            <b>Binance Agent OS</b> · account and execution
           </span>
           <span>
-            <b>x402</b> · paid research
+            <b>MCP</b> · plain-language control
           </span>
           <span>
-            <b>MCP</b> · your AI client
+            <b>Isolated Futures</b> · one-symbol hedge
           </span>
           <span>
-            <b>Signed receipts</b> · inspectable claims
+            <b>One-use code</b> · human approval
           </span>
         </div>
       </div>
@@ -90,14 +90,14 @@ export default function Home() {
           <div>
             <p className="eyebrow">TAKE THE CONTROLS</p>
             <h2>
-              Watch the decision
+              Meet Telt without
               <br />
-              take shape.
+              connecting an account.
             </h2>
           </div>
           <p className="section-intro">
-            Choose a research question. Inspect what Telt reads, what it skips,
-            and where the evidence stops.
+            Ask a live market question first. The public route shows the same
+            bounded reasoning style and has no account or order access.
           </p>
         </div>
         <Demo />
@@ -105,48 +105,47 @@ export default function Home() {
       <section className="wrap section" id="workflow">
         <div className="section-top">
           <div>
-            <p className="eyebrow">LESS GUESSWORK. MORE CONTEXT.</p>
-            <h2>Curiosity, with limits.</h2>
+            <p className="eyebrow">ONE REQUEST. BOTH SIDES.</p>
+            <h2>A hedge you can understand.</h2>
           </div>
           <p className="section-intro">
-            The model reasons. Telt checks the budget, exchange rules, and exact
-            order you approve.
+            Say what you want protected. Telt turns that intent into a bounded,
+            reviewable action on Binance.
           </p>
         </div>
         <div className="three-grid">
           <article className="feature-card mint">
-            <span className="card-index">01 / SPEND WITH INTENT</span>
+            <span className="card-index">01 / READ THE EXPOSURE</span>
             <div className="feature-icon" aria-hidden="true">
               <Icon name="orbit" />
             </div>
-            <h3>Buy the next useful fact.</h3>
+            <h3>Start from what you hold.</h3>
             <p>
-              A quick price check starts with the venue and an independent
-              quote. A trade question can add flow data. Every source has a
-              reason and a cost.
+              Telt reads the actual Spot balance, including locked assets, and
+              confirms that a matching USD-M Futures market exists.
             </p>
           </article>
           <article className="feature-card lavender">
-            <span className="card-index">02 / MAKE THE REASON EXPLICIT</span>
+            <span className="card-index">02 / CALCULATE THE HEDGE</span>
             <div className="feature-icon" aria-hidden="true">
               <Icon name="waves" />
             </div>
-            <h3>Leave a decision trail.</h3>
+            <h3>See the protection before it exists.</h3>
             <p>
-              Record a conclusion, cite its evidence, and say what would change
-              your mind. Bind that research run to the proposal you review.
+              Review coverage, short quantity, position value, isolated
+              leverage, required margin, available Futures cash, and limits.
             </p>
           </article>
           <article className="feature-card sand">
-            <span className="card-index">03 / KEEP YOUR SAY</span>
+            <span className="card-index">03 / KEEP CONTROL</span>
             <div className="feature-icon" aria-hidden="true">
               <Icon name="arrow" />
             </div>
-            <h3>Approve the exact order.</h3>
+            <h3>Confirm, check, or remove it.</h3>
             <p>
-              Review size, fees, and price tolerance. Confirmation is single
-              use; expired evidence and changed conditions require a fresh
-              proposal.
+              A one-use code opens the isolated short. Ask how protected you
+              are to see both legs together. Ask Telt to remove protection for
+              a reduce-only close.
             </p>
           </article>
         </div>
@@ -179,16 +178,16 @@ export default function Home() {
       <section className="wrap section connect-banner">
         <p className="eyebrow">YOUR CLIENT. YOUR ACCOUNT.</p>
         <h2>
-          Bring Telt to your
+          Bring Telt to ChatGPT
           <br />
-          next conversation<span className="red">.</span>
+          or any MCP client<span className="red">.</span>
         </h2>
         <p className="lede">
-          Use Telt through an MCP client, with Binance Agent OS connected on
-          your own runtime.
+          Connect <code>https://mcp.telt.site/mcp</code>, then say “protect my
+          SOL” or “how protected is my BTC?”
         </p>
         <Link href="/connect" className="button primary">
-          Set up Telt <Icon name="arrow" />
+          See the MCP setup <Icon name="arrow" />
         </Link>
       </section>
     </main>

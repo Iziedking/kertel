@@ -22,7 +22,7 @@ const mono = Space_Mono({
 
 const TITLE = "Telt · Your Binance AI agent";
 const DESCRIPTION =
-  "A Binance AI agent built with Agent OS. Research with a budget, record a decision, approve an exact order, and inspect signed receipts.";
+  "A conversational Binance Agent OS tool that reads a Spot holding, calculates a matching isolated Futures hedge, and waits for human approval.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -73,9 +73,9 @@ export default function RootLayout({
               telt<span className="wm-accent">.</span>
             </a>
             <p>
-              An independent project built with Binance Agent OS. Trading
-              involves risk. Research and signatures do not guarantee a
-              profitable outcome.
+              An independent project built with Binance Agent OS. A hedge can
+              reduce price exposure, but fees, funding, basis, liquidation,
+              and balance changes still carry risk.
             </p>
           </div>
           <div className="footer-links">
