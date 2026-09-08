@@ -40,7 +40,7 @@ export type Tier = 0 | 1 | 2 | 3;
  * providers corroborate each other; a price and a market-cap figure from the
  * same provider do not.
  */
-export type EvidenceKind = "price" | "flow" | "context" | "onchain";
+export type EvidenceKind = "price" | "flow" | "context" | "onchain" | "sentiment" | "technical";
 
 export type RecipeStep = {
   readonly id: string;
@@ -59,6 +59,7 @@ export type RecipeStep = {
 const FREE = fp.parse("0.00");
 const CHEAP = fp.parse("0.01");
 const NANSEN = fp.parse("0.05");
+const CENT_HALF = fp.parse("0.005");
 
 /**
  * Every step, in the order the planner prefers within a tier.
@@ -101,6 +102,45 @@ export const RECIPE_STEPS: readonly RecipeStep[] = Object.freeze([
     estimatedCost: CHEAP,
     freshness: seconds(120),
     rationale: "A second independent price. Bought only to break a disagreement between the first two.",
+  },
+  {
+    // Bought before conviction, not after. This one can only ever stop a
+    // trade, and discovering a honeypot after paying five cents for flow data
+    // is paying to learn something in the wrong order.
+    id: "openpulse.safety",
+    provider: "openpulse",
+    capability: "onchain.safety",
+    endpointId: "openpulse:token/safety",
+    kind: "onchain",
+    tier: 2,
+    estimatedCost: CHEAP,
+    freshness: seconds(3600),
+    rationale:
+      "Honeypot, mint authority and ownership on the contract itself. A floor rather than an edge: it exists to stop a trade, so it is bought before anything that justifies one.",
+  },
+  {
+    id: "openpulse.sentiment",
+    provider: "openpulse",
+    capability: "market.sentiment",
+    endpointId: "openpulse:sentiment",
+    kind: "sentiment",
+    tier: 2,
+    estimatedCost: CHEAP,
+    freshness: seconds(900),
+    rationale:
+      "What is being said about it, aggregated. The cheapest way to learn that something changed which the price has not caught up with yet.",
+  },
+  {
+    id: "openpulse.candles",
+    provider: "openpulse",
+    capability: "market.technical",
+    endpointId: "openpulse:token/ohlcv",
+    kind: "technical",
+    tier: 2,
+    estimatedCost: CENT_HALF,
+    freshness: seconds(900),
+    rationale:
+      "The candles, so a technical read is measured rather than imagined. Telt reports the range and where price sits in it; it does not name patterns.",
   },
   {
     id: "nansen.netflow",

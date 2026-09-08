@@ -117,7 +117,13 @@ export type AccountSnapshot = {
 // Evidence
 // ---------------------------------------------------------------------------
 
-export type ProviderId = "nansen" | "coingecko" | "coinmarketcap" | "thegraph" | "binance";
+export type ProviderId =
+  | "nansen"
+  | "coingecko"
+  | "coinmarketcap"
+  | "thegraph"
+  | "binance"
+  | "openpulse";
 
 /**
  * What an observation is worth.

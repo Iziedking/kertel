@@ -48,6 +48,11 @@
       "telt-source": "./src/attest/index.ts",
       "types": "./dist/attest/index.d.ts",
       "default": "./dist/attest/index.js"
+    },
+    "./autonomy": {
+      "telt-source": "./src/autonomy/index.ts",
+      "types": "./dist/autonomy/index.d.ts",
+      "default": "./dist/autonomy/index.js"
     }
   },
   "$comment": "This package has no dependencies and must keep none. It is the deterministic core: no network, no filesystem, no clock, no OpenClaw, no Binance, no model. Its second consumer is scripts/prove.ts, which runs the same policy, proposal and confirmation functions the live plugin runs.",

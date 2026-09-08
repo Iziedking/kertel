@@ -399,7 +399,10 @@ describe("what the receipt can say", () => {
       fp.parse("0.00"),
     );
     // CoinMarketCap at a cent, Nansen at five, The Graph at a cent.
-    expect(fp.format(saved)).toBe("0.07");
+    // 0.095: Nansen 0.05, the second price 0.01, the subgraph 0.01, plus the
+    // three OpenPulse steps at 0.01 + 0.01 + 0.005. Every one of them is a
+    // question this run did not need to ask, and the receipt names each.
+    expect(fp.format(saved)).toBe("0.095");
     for (const step of outcome.decision.skipped) {
       expect(step.reason.length, step.id).toBeGreaterThan(10);
     }

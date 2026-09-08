@@ -147,6 +147,20 @@ export const MERCHANT_PINS: Readonly<Record<string, MerchantPin>> = Object.freez
     observedPriceUsdc: "0.05",
     observedOn: "2026-09-07",
   },
+  openpulse: {
+    host: "safety.openpulsechain.com",
+    // Confirmed twice on 2026-09-08, and the two must agree before it is
+    // pinned: the published catalogue at /.well-known/x402 names this address,
+    // and the live 402 challenge on /api/v1/sentiment/ETH carries the same one.
+    // A catalogue alone is a claim; a challenge alone could be tampered with in
+    // flight. Two independent sources saying the same thing is the bar.
+    payTo: "0x471DD912cdCDD6DB71a97E5a69531bD50229111d",
+    observedRails: ["base-usdc"],
+    // The cheapest of the three steps Telt buys here. Safety and sentiment are
+    // a cent each; the live challenge decides what is actually approved.
+    observedPriceUsdc: "0.005",
+    observedOn: "2026-09-08",
+  },
   thegraph: {
     host: "gateway.thegraph.com",
     payTo: "0x79DC34E41B2b591078d3dE222C43EcaaBD52FcCB",

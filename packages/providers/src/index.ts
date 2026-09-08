@@ -5,6 +5,7 @@ export * from "./binance.js";
 export * from "./coingecko.js";
 export * from "./coinmarketcap.js";
 export * from "./nansen.js";
+export * from "./openpulse.js";
 export * from "./thegraph.js";
 export * from "./registry.js";
 export * from "./executor.js";

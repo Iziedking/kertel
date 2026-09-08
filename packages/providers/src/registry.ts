@@ -18,6 +18,11 @@ import { binancePriceAdapter } from "./binance.js";
 import { coingeckoPriceAdapter } from "./coingecko.js";
 import { coinmarketcapPriceAdapter } from "./coinmarketcap.js";
 import { nansenNetflowAdapter } from "./nansen.js";
+import {
+  openpulseCandlesAdapter,
+  openpulseSafetyAdapter,
+  openpulseSentimentAdapter,
+} from "./openpulse.js";
 import { thegraphPoolAdapter } from "./thegraph.js";
 import type { ProviderAdapter } from "./types.js";
 
@@ -26,6 +31,9 @@ export const ADAPTERS: readonly ProviderAdapter[] = Object.freeze([
   coingeckoPriceAdapter,
   coinmarketcapPriceAdapter,
   nansenNetflowAdapter,
+  openpulseSafetyAdapter,
+  openpulseSentimentAdapter,
+  openpulseCandlesAdapter,
   thegraphPoolAdapter,
 ]);
 
