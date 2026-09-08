@@ -50,7 +50,7 @@ import {
   unmappedInstrument,
 } from "@telt/providers";
 
-import { createBinanceClient } from "./infra/binance.js";
+import { clientOrderIdFrom, createBinanceClient } from "./infra/binance.js";
 import { createAgentOs } from "./infra/agentos.js";
 import { createFuturesClient } from "./infra/futures.js";
 import type { FuturesClient } from "./infra/futures.js";
@@ -62,6 +62,8 @@ import {
 } from "./futures-trading.js";
 import type { FuturesDeps, FuturesOutcome } from "./futures-trading.js";
 import { describeHedge, proposeHedge } from "./hedge.js";
+import { classifyGuard } from "./guard.js";
+import type { ProtectionMandate } from "./infra/mandate-store.js";
 import { checkProtection, memoryLane } from "./protection.js";
 import { loadFixtureExchanges } from "./infra/fixtures.js";
 import type { BinanceClient } from "./infra/binance.js";
@@ -135,6 +137,11 @@ export type Runtime = {
     readonly leverage: number;
   }): Promise<FuturesOutcome>;
   describeHedge(symbol: string): Promise<FuturesOutcome>;
+  guard: {
+    arm(input: { readonly symbol: string; readonly coverageBps: number; readonly leverage: number; readonly hours: number }): string;
+    revoke(symbol: string): string;
+    status(symbol?: string): Promise<string>;
+  };
   checkProtection(input: {
     readonly symbol: string;
     readonly investigate: boolean;
@@ -403,6 +410,54 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       return { ok: result.ok, body: result.body };
     },
     newId: tradingDeps.newId,
+    guardSweep: async () => {
+      const mandates = store.mandates.allProtection().filter((mandate) => mandate.status === "active");
+      if (mandates.length === 0) return [];
+      const lines: string[] = [];
+      for (const mandate of mandates) {
+        const status = await guardStatus(mandate.symbol);
+        lines.push(status.replace(/\n/g, " | "));
+        const current = store.mandates.activeProtection(mandate.symbol);
+        const now = clock.now();
+        const actionable = status.includes("UNPROTECTED") || status.includes("UNDERHEDGED") || status.includes("OVERHEDGED");
+        const cooling = current?.lastActionAt !== null && current?.lastActionAt !== undefined && now - current.lastActionAt < current.cooldownMs;
+        if (!actionable || current === null || cooling || futuresDeps === null || config.mode !== "live" || !config.policy.trading.liveExecutionEnabled) continue;
+        const [rules, account, position, mark] = await Promise.all([binance.filters(current.symbol as Symbol_), binance.account(), futuresDeps.futures.position(current.symbol as Symbol_), futuresDeps.futures.markPrice(current.symbol as Symbol_)]);
+        if (!rules.ok || !account.ok || !position.ok || !mark.ok) { lines.push(`Guard action paused for ${current.symbol}: state became unknown during the fresh read.`); continue; }
+        const balance = account.value.balances.find((entry) => entry.asset === rules.value.baseAsset);
+        const spot = balance === undefined ? fp.parse("0") : fp.add(balance.free, balance.locked);
+        const short = fp.isNegative(position.value.positionAmt) ? fp.abs(position.value.positionAmt) : fp.parse("0");
+        const decision = classifyGuard({ spotQuantity: spot, futuresShortQuantity: short, targetCoverageBps: current.targetCoverageBps, toleranceBps: current.toleranceBps, maxAgeMs: 30_000, observedAt: clock.now(), now, marketAvailable: true });
+        const adjustment = decision.adjustmentQuantity;
+        const maxAdjustment = fp.applyBasisPoints(spot, current.maxAdjustmentBps, "floor");
+        if (adjustment === null || !fp.isPositive(adjustment) || fp.greaterThan(adjustment, maxAdjustment) || fp.greaterThan(fp.multiply(adjustment, mark.value), fp.parse(current.maxNotional))) { lines.push(`Guard action paused for ${current.symbol}: adjustment is outside the mandate cap.`); continue; }
+        if (fp.lessThan(adjustment, rules.value.minQuantity)) { lines.push(`Guard action paused for ${current.symbol}: adjustment is below the exchange lot minimum.`); continue; }
+        const isolated = await futuresDeps.futures.setIsolated(current.symbol as Symbol_);
+        if (!isolated.ok) { lines.push(`Guard action paused for ${current.symbol}: could not set isolated margin.`); continue; }
+        const levered = await futuresDeps.futures.setLeverage(current.symbol as Symbol_, current.leverage);
+        if (!levered.ok) { lines.push(`Guard action paused for ${current.symbol}: could not set leverage.`); continue; }
+        const clientOrderId = clientOrderIdFrom(sha256(`telt.guard.v1\n${current.id}\n${current.version}\n${decision.state}\n${fp.format(adjustment)}`));
+        const filled = decision.state === "overhedged"
+          ? await futuresDeps.futures.close({ symbol: current.symbol as Symbol_, position: position.value, quantity: adjustment, clientOrderId })
+          : await futuresDeps.futures.open({ symbol: current.symbol as Symbol_, side: "SELL", quantity: adjustment, clientOrderId });
+        if (!filled.ok) {
+          if (filled.error.code === "EXECUTION_RESULT_UNKNOWN") store.engageKillSwitch(`Guard order for ${current.symbol} was sent and not confirmed.`, now);
+          lines.push(`Guard action unresolved for ${current.symbol}: ${filled.error.detail}`);
+          continue;
+        }
+        const after = await futuresDeps.futures.position(current.symbol as Symbol_);
+        if (!after.ok || (decision.state === "overhedged" && fp.greaterThan(fp.abs(after.value.positionAmt), fp.applyBasisPoints(spot, current.targetCoverageBps + current.toleranceBps, "ceil")))) {
+          store.engageKillSwitch(`Guard Mode could not prove the final Futures state for ${current.symbol}.`, now);
+          lines.push(`Guard halted for ${current.symbol}: final position could not be proven.`);
+          continue;
+        }
+        if (after.ok && !fp.isZero(after.value.positionAmt)) store.mandates.adopt({ symbol: current.symbol, entryPrice: fp.format(after.value.entryPrice), quantity: fp.format(fp.abs(after.value.positionAmt)), source: "telt-guard", at: now });
+        store.mandates.checkpointProtection(current.id, { at: now, state: "hedge_opened", actionAt: now });
+        store.mandates.journal({ at: now, kind: "hedge_opened", symbol: current.symbol, mandateId: current.id, headline: `Guard Mode opened or resized ${current.symbol}`, detail: `The mandate authorized ${String(current.targetCoverageBps / 100)}% coverage at ${String(current.leverage)}x isolated. Order ${filled.value.orderRef} is ${filled.value.status} with ${fp.format(filled.value.filledQuantity)} filled.`, evidence: null });
+        lines.push(`Guard action completed for ${current.symbol}: Futures short reconciled.`);
+      }
+      return lines;
+    },
   };
 
   const monitor = createMonitor(monitorDeps, MONITOR_INTERVAL_MS);
@@ -838,6 +893,61 @@ ${renderAttestationBlock(signed)}`;
     };
   }
 
+  function armGuard(input: { readonly symbol: string; readonly coverageBps: number; readonly leverage: number; readonly hours: number }): string {
+    const symbol = input.symbol.trim().toUpperCase();
+    if (!/^[A-Z0-9]{5,20}USDT$/.test(symbol)) return "Guard refused: use a Binance USDT pair such as BTCUSDT.";
+    if (!Number.isInteger(input.coverageBps) || input.coverageBps < 9000 || input.coverageBps > 10000) return "Guard refused: coverage must be between 9000 and 10000 basis points (90–100%).";
+    if (!Number.isInteger(input.leverage) || input.leverage < 1 || input.leverage > config.maxLeverage) return `Guard refused: leverage must be a whole number from 1 to ${String(config.maxLeverage)}.`;
+    if (!Number.isInteger(input.hours) || input.hours < 1 || input.hours > 168) return "Guard refused: expiry must be between 1 and 168 hours.";
+    const existing = store.mandates.activeProtection(symbol);
+    if (existing !== null) return `Guard already active for ${symbol} (mandate ${existing.id}, version ${String(existing.version)}). Revoke it before replacing it.`;
+    const now = clock.now();
+    const mandate: ProtectionMandate = {
+      id: tradingDeps.newId("guard"),
+      symbol,
+      targetCoverageBps: input.coverageBps,
+      toleranceBps: 150,
+      maxNotional: fp.format(config.maxFuturesNotional),
+      leverage: input.leverage,
+      maxAdjustmentBps: 2000,
+      version: 1,
+      createdAt: now,
+      expiresAt: (now + input.hours * 3_600_000) as Instant,
+      cooldownMs: 60_000,
+      status: "active",
+      lastActionAt: null,
+      checkpointAt: now,
+      lastState: "armed",
+    };
+    store.mandates.saveProtection(mandate);
+    store.mandates.journal({ at: now, kind: "mandate_created", symbol, mandateId: mandate.id, headline: `Guard Mode armed for ${symbol}`, detail: `Version 1 targets ${String(input.coverageBps / 100)}% coverage with ${String(input.leverage)}x isolated Futures. Expires ${formatInstant(mandate.expiresAt)}.`, evidence: null });
+    return [`Guard Mode armed for ${symbol}.`, `Mandate: ${mandate.id} (version 1)`, `Target coverage: ${String(input.coverageBps / 100)}%`, `Tolerance: 1.50%`, `Maximum Futures notional: ${mandate.maxNotional} USDT`, `Expires: ${formatInstant(mandate.expiresAt)}`, "The daemon will classify exposure and fail closed on stale or uncertain state. Automatic opening/resizing remains behind the live execution gate."].join("\n");
+  }
+
+  function revokeGuard(symbol: string): string {
+    const normalized = symbol.trim().toUpperCase();
+    const mandate = store.mandates.activeProtection(normalized);
+    if (mandate === null) return `No active Guard Mode mandate for ${normalized}.`;
+    const now = clock.now();
+    store.mandates.revokeProtection(mandate.id, now);
+    store.mandates.journal({ at: now, kind: "mandate_cancelled", symbol: normalized, mandateId: mandate.id, headline: `Guard Mode revoked for ${normalized}`, detail: `Version ${String(mandate.version)} can no longer open or resize a hedge. Existing Futures positions are untouched.`, evidence: null });
+    return `Guard Mode revoked for ${normalized}. No further autonomous opening or resizing is permitted.`;
+  }
+
+  async function guardStatus(symbol?: string): Promise<string> {
+    const mandate = store.mandates.activeProtection(symbol?.trim().toUpperCase());
+    if (mandate === null) return symbol === undefined ? "Guard Mode is not armed for any symbol." : `Guard Mode is not armed for ${symbol.trim().toUpperCase()}.`;
+    if (futuresDeps === null) return `Guard Mode ${mandate.id} is armed for ${mandate.symbol}, but Binance Agent OS Futures is unavailable. State is unknown and Telt will not act.`;
+    const [rules, account, position, mark] = await Promise.all([binance.filters(mandate.symbol as Symbol_), binance.account(), futuresDeps.futures.position(mandate.symbol as Symbol_), futuresDeps.futures.markPrice(mandate.symbol as Symbol_)]);
+    if (!rules.ok || !account.ok || !position.ok || !mark.ok) return `Guard Mode ${mandate.id} is UNKNOWN for ${mandate.symbol}. Telt will not act until all account, position, price and filter reads succeed.`;
+    const balance = account.value.balances.find((entry) => entry.asset === rules.value.baseAsset);
+    const spot = balance === undefined ? fp.parse("0") : fp.add(balance.free, balance.locked);
+    const observation = classifyGuard({ spotQuantity: spot, futuresShortQuantity: fp.isNegative(position.value.positionAmt) ? fp.abs(position.value.positionAmt) : fp.parse("0"), targetCoverageBps: mandate.targetCoverageBps, toleranceBps: mandate.toleranceBps, maxAgeMs: 30_000, observedAt: clock.now(), now: clock.now(), marketAvailable: true });
+    store.mandates.checkpointProtection(mandate.id, { at: clock.now(), state: observation.state });
+    store.mandates.journal({ at: clock.now(), kind: "hedge_checked", symbol: mandate.symbol, mandateId: mandate.id, headline: `Guard classified ${mandate.symbol} as ${observation.state}`, detail: `${observation.because} Coverage ${String(observation.coverageBps / 100)}%.`, evidence: null });
+    return [`Guard Mode: ${observation.state.toUpperCase()}`, `Symbol: ${mandate.symbol}`, `Mandate: ${mandate.id} (version ${String(mandate.version)})`, `Coverage: ${String(observation.coverageBps / 100)}%`, `Target: ${String(mandate.targetCoverageBps / 100)}%`, `Reason: ${observation.because}`, "Every action is gated by the mandate, live execution flag, exchange filters and reconciliation."].join("\n");
+  }
+
   return {
     config,
     clock,
@@ -945,6 +1055,7 @@ ${renderAttestationBlock(signed)}`;
       futuresDeps === null
         ? noFutures
         : describeHedge({ binance, futures: futuresDeps.futures }, symbol),
+    guard: { arm: armGuard, revoke: revokeGuard, status: guardStatus },
     checkProtection: async (input) =>
       checkProtection(
         {

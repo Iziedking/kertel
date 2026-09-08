@@ -86,6 +86,7 @@ export function buildServer(runtime: Runtime): McpServer {
         "      Show both legs and wait for the code. It works for any USDT pair listed on both Spot",
         "      and USD-M Futures. Never claim a Spot-only token can be hedged by this version.",
         '- "how protected is my X" / "is my hedge balanced" -> telt_hedge_status.',
+        '- "guard my X" / "watch my X while I am away" -> ask for the user to approve Guard Mode once, then call telt_guard_arm. After arming, call telt_guard_status to show the deterministic state. Guard Mode is opt-in, versioned, expires, and can be revoked.',
         '- "remove my X protection" / "unhedge X" -> telt_futures_close with the full fraction.',
         '- "how am I doing" / "what am I holding" / "any risks" / "should I worry"',
         "    -> telt_watch, then telt_positions. Lead with anything unprotected or near a stop.",
@@ -870,6 +871,43 @@ export function buildServer(runtime: Runtime): McpServer {
         });
         return text(result.body, !result.ok);
       }),
+  );
+
+  server.registerTool(
+    "telt_guard_arm",
+    {
+      title: "Arm Guard Mode",
+      description:
+        "Create a durable, versioned protection mandate for one Binance USDT pair. The user must explicitly approve this call. Telt then classifies Spot and isolated Futures exposure on every monitor sweep, records checkpoints, and fails closed when reads are stale or uncertain. This does not bypass the live execution gate.",
+      inputSchema: {
+        symbol: z.string().describe("USDT pair, for example SOLUSDT."),
+        coverageBps: z.number().int().min(9000).max(10000).default(10000).describe("Target hedge coverage from 90% to 100%."),
+        leverage: z.number().int().min(1).default(2).describe("Isolated Futures leverage, capped by Telt configuration."),
+        hours: z.number().int().min(1).max(168).default(24).describe("Mandate lifetime in hours."),
+      },
+    },
+    async ({ symbol, coverageBps, leverage, hours }) =>
+      guard(() => text(runtime.guard.arm({ symbol, coverageBps, leverage, hours }))),
+  );
+
+  server.registerTool(
+    "telt_guard_status",
+    {
+      title: "Read Guard Mode status",
+      description: "Read the active protection mandate and classify current Spot versus Futures coverage as protected, underhedged, overhedged, unprotected or unknown. Free and read-only.",
+      inputSchema: { symbol: z.string().optional().describe("Optional USDT pair." ) },
+    },
+    async ({ symbol }) => guard(async () => text(await runtime.guard.status(symbol))),
+  );
+
+  server.registerTool(
+    "telt_guard_revoke",
+    {
+      title: "Revoke Guard Mode",
+      description: "Revoke the active protection mandate for a symbol. Existing exchange positions are untouched; no further autonomous opening or resizing may occur under that mandate.",
+      inputSchema: { symbol: z.string().describe("USDT pair to revoke." ) },
+    },
+    async ({ symbol }) => guard(() => text(runtime.guard.revoke(symbol))),
   );
 
   server.registerTool(

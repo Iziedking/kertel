@@ -35,6 +35,24 @@ export type JournalKind =
   | "hedge_researched"
   | "hedge_closed";
 
+export type ProtectionMandate = {
+  readonly id: string;
+  readonly symbol: string;
+  readonly targetCoverageBps: number;
+  readonly toleranceBps: number;
+  readonly maxNotional: string;
+  readonly leverage: number;
+  readonly maxAdjustmentBps: number;
+  readonly version: number;
+  readonly createdAt: Instant;
+  readonly expiresAt: Instant;
+  readonly cooldownMs: number;
+  readonly status: "active" | "revoked" | "expired";
+  readonly lastActionAt: Instant | null;
+  readonly checkpointAt: Instant | null;
+  readonly lastState: string | null;
+};
+
 export type JournalEntry = {
   readonly at: Instant;
   readonly kind: JournalKind;
@@ -96,6 +114,12 @@ export type MandateStore = {
   }[];
   forgetAdopted(symbol: string): void;
 
+  saveProtection(mandate: ProtectionMandate): void;
+  activeProtection(symbol?: string): ProtectionMandate | null;
+  allProtection(): readonly ProtectionMandate[];
+  revokeProtection(id: string, at: Instant): void;
+  checkpointProtection(id: string, input: { readonly at: Instant; readonly state: string; readonly actionAt?: Instant | null }): void;
+
   learn(lesson: Lesson): void;
   lessonsFor(symbol: string): readonly Lesson[];
   allLessons(): readonly Lesson[];
@@ -151,7 +175,34 @@ function toJournal(row: Record<string, unknown>): JournalEntry {
   };
 }
 
+function toProtection(row: Record<string, unknown>): ProtectionMandate {
+  return {
+    id: String(row["id"]),
+    symbol: String(row["symbol"]),
+    targetCoverageBps: Number(row["target_coverage_bps"]),
+    toleranceBps: Number(row["tolerance_bps"]),
+    maxNotional: String(row["max_notional"]),
+    leverage: Number(row["leverage"]),
+    maxAdjustmentBps: Number(row["max_adjustment_bps"]),
+    version: Number(row["version"]),
+    createdAt: Number(row["created_at"]) as Instant,
+    expiresAt: Number(row["expires_at"]) as Instant,
+    cooldownMs: Number(row["cooldown_ms"]),
+    status: String(row["status"]) as ProtectionMandate["status"],
+    lastActionAt: row["last_action_at"] === null ? null : (Number(row["last_action_at"]) as Instant),
+    checkpointAt: row["checkpoint_at"] === null ? null : (Number(row["checkpoint_at"]) as Instant),
+    lastState: row["last_state"] === null ? null : String(row["last_state"]),
+  };
+}
+
 export function mandateStore(db: DatabaseSync): MandateStore {
+  db.exec(`CREATE TABLE IF NOT EXISTS protection_mandates (
+    id TEXT PRIMARY KEY, symbol TEXT NOT NULL, target_coverage_bps INTEGER NOT NULL,
+    tolerance_bps INTEGER NOT NULL, max_notional TEXT NOT NULL, leverage INTEGER NOT NULL,
+    max_adjustment_bps INTEGER NOT NULL, version INTEGER NOT NULL, created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL, cooldown_ms INTEGER NOT NULL, status TEXT NOT NULL,
+    last_action_at INTEGER, checkpoint_at INTEGER, last_state TEXT
+  ); CREATE INDEX IF NOT EXISTS protection_mandates_active ON protection_mandates(status, symbol);`);
   return {
     save(mandate, lastSeenPrice, lastCheckedAt, codeHash = null) {
       db.prepare(
@@ -379,6 +430,37 @@ export function mandateStore(db: DatabaseSync): MandateStore {
 
     forgetAdopted(symbol) {
       db.prepare("DELETE FROM adopted WHERE symbol = ?").run(symbol);
+    },
+
+    saveProtection(mandate) {
+      db.prepare(`INSERT OR REPLACE INTO protection_mandates
+        (id, symbol, target_coverage_bps, tolerance_bps, max_notional, leverage,
+         max_adjustment_bps, version, created_at, expires_at, cooldown_ms, status,
+         last_action_at, checkpoint_at, last_state)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(mandate.id, mandate.symbol, mandate.targetCoverageBps, mandate.toleranceBps,
+          mandate.maxNotional, mandate.leverage, mandate.maxAdjustmentBps, mandate.version,
+          mandate.createdAt, mandate.expiresAt, mandate.cooldownMs, mandate.status,
+          mandate.lastActionAt, mandate.checkpointAt, mandate.lastState);
+    },
+
+    activeProtection(symbol) {
+      const row = db.prepare("SELECT * FROM protection_mandates WHERE status = 'active' AND expires_at > ? AND (? IS NULL OR symbol = ?) ORDER BY created_at DESC LIMIT 1")
+        .get(Date.now(), symbol ?? null, symbol ?? null) as Record<string, unknown> | undefined;
+      return row === undefined ? null : toProtection(row);
+    },
+
+    allProtection() {
+      const rows = db.prepare("SELECT * FROM protection_mandates ORDER BY created_at DESC").all() as Record<string, unknown>[];
+      return rows.map(toProtection);
+    },
+
+    revokeProtection(id, at) {
+      db.prepare("UPDATE protection_mandates SET status = 'revoked', checkpoint_at = ? WHERE id = ? AND status = 'active'").run(at, id);
+    },
+
+    checkpointProtection(id, input) {
+      db.prepare("UPDATE protection_mandates SET checkpoint_at = ?, last_state = ?, last_action_at = COALESCE(?, last_action_at) WHERE id = ? AND status = 'active'").run(input.at, input.state, input.actionAt ?? null, id);
     },
 
     learn(lesson) {

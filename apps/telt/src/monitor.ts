@@ -51,6 +51,8 @@ export type MonitorDeps = {
     symbol: string,
   ) => Promise<{ readonly ok: boolean; readonly body: string }>;
   readonly newId: (prefix: string) => string;
+  /** Optional Guard Mode pass. It is absent unless an explicit mandate exists. */
+  readonly guardSweep?: () => Promise<readonly string[]>;
 };
 
 export type SweepResult = {
@@ -81,6 +83,11 @@ async function performSweep(deps: MonitorDeps): Promise<SweepResult> {
   const now = deps.now();
   const lines: string[] = [];
 
+  if (deps.guardSweep !== undefined) {
+    const guardLines = await deps.guardSweep();
+    lines.push(...guardLines);
+  }
+
   const safety = deps.store.safetyState();
   if (safety.killSwitchEngaged) {
     return {
@@ -107,7 +114,7 @@ async function performSweep(deps: MonitorDeps): Promise<SweepResult> {
   const mandates = deps.store.mandates.active();
   if (mandates.length === 0) {
     await settleOldVerdicts(deps, now);
-    return { checked: 0, fired: 0, halted: null, lines: [] };
+    return { checked: 0, fired: 0, halted: null, lines };
   }
 
   let fired = 0;

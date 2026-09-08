@@ -1,6 +1,6 @@
 # Telt
 
-Evidence-first Binance Agent OS trader. Telt reads a real Spot balance, sizes an isolated USD-M Futures hedge, uses capped paid research for context, and waits for explicit confirmation before live execution.
+Autonomous position protection for Binance Agent OS. Telt watches a Spot holding against an isolated USD-M Futures hedge, records every decision, and stops when account state is stale or uncertain.
 
 - [Run the live demo](https://telt.site/#demo)
 - [Connect an MCP client](https://telt.site/connect)
@@ -27,18 +27,20 @@ The public site and hosted MCP endpoint cannot access a user's Binance account. 
 - Agent OS USDⓈ-M Futures positions with isolated margin, a configured margin multiplier ceiling, and reduce-only closes.
 - One-symbol protection for any USDT pair listed on both Spot and USD-M Futures. Telt refuses Spot-only pairs and conflicting existing Futures positions.
 - Protection Watch, which checks both legs for free. An explicit investigation buys paid research and attaches it as context without giving research authority over the hedge.
+- Guard Mode, an explicit, versioned mandate that survives restarts, expires automatically, records checkpoints, and classifies exposure as protected, underhedged, overhedged, unprotected, or unknown.
 - Memory Lane, which records proposals, openings, checks, investigations, and removals for the next session.
 - Approved exit plans that can scale out, ratchet stops, and halt on unknown or incomplete fills.
 
 ## How it works
 
-1. Say what to protect, for example “protect all my SOL at 2x.”
+1. Say what to protect, for example “guard my SOL at 2x while I am away.”
 2. Telt verifies that `SOLUSDT` trades on both Binance Spot and USD-M Futures, then reads the actual SOL balance.
 3. It calculates the short quantity from the requested coverage and checks the Futures lot size, minimum position value, Telt's cap, leverage ceiling, and available USDT margin.
 4. It shows the Spot holding, target short, resulting net exposure, required margin, and available Futures cash. No account setting or order changes at this point.
 5. A human types the one-use code. Telt rechecks the position and price, forces isolated margin, sets the approved leverage, and opens the short.
 6. Ask “check my SOL protection” to read both legs as one position for free. Ask “investigate my SOL protection” when you want Telt to spend research points on outside market context.
-7. Ask for the SOL Memory Lane to see the proposal, opening, checks, investigations, and removal in time order. Ask “remove my SOL protection” to close the Futures leg with a reduce-only order.
+7. For unattended protection, approve Guard Mode once with `telt_guard_arm`. Telt stores the mandate, runs it from the local daemon, and exposes `telt_guard_status` and `telt_guard_revoke` for inspection and control.
+8. Ask for the SOL Memory Lane to see the proposal, opening, checks, investigations, and removal in time order. Ask “remove my SOL protection” to close the Futures leg with a reduce-only order.
 
 This path is generic. It supports any `...USDT` asset that Binance currently lists on both Spot and USD-M Futures. BTC, ETH, BNB, and SOL are examples, not a hardcoded allowlist. A Spot-only token cannot use this hedge path.
 
@@ -121,11 +123,12 @@ npm start -- -p 3100
 
 - Protection covers one Spot holding at a time. It does not reconcile total account exposure or multi-asset risk.
 - Coverage is quantity based. Fees, funding, price basis, liquidation, and later balance changes can create drift.
-- Protection Watch is a conversational check. Continuous alerts, timed removal, and restart-safe watch state are roadmap work.
+- Guard Mode is opt-in and bounded to one symbol, isolated USD-M Futures, a coverage range, a notional ceiling, leverage, cooldown, and expiry. Opening and resizing remain behind the live execution gate and existing exchange reconciliation checks.
+- Account-wide loss and total exposure accounting, WebSocket event ingestion, transition notifications, and multi-symbol mandates remain roadmap work.
 - Paid research depends on verified provider mappings. Telt reports missing coverage instead of guessing an identifier.
 - Unknown or incomplete fills halt activity until reconciliation. No system can guarantee a fill price, profit, or liquidation outcome.
 
-Roadmap: account-wide loss and exposure accounting, durable watch state with transition alerts, wider verified research coverage, hedge performance reconciliation, and operator pause, resume, and export controls.
+Roadmap: account-wide loss and exposure accounting, WebSocket plus polling reconciliation, transition alerts, wider verified research coverage, hedge performance reconciliation, and operator pause, resume, and export controls.
 
 Telt refuses unsupported pairs, conflicting Futures positions, insufficient margin, and orders outside configured limits. A hedge reduces directional exposure; fees, funding, price differences, liquidation risk, and later balance changes can affect the result.
 
