@@ -3,7 +3,7 @@
  *
  * This is tier 0 of the research ladder and the only adapter that never touches
  * the payment client. It is also the one whose failure ends a run immediately:
- * if Kertel cannot read the book on the exchange it would trade on, no amount
+ * if Telt cannot read the book on the exchange it would trade on, no amount
  * of bought evidence makes a trade possible, so the planner refuses before
  * spending a cent.
  *
@@ -19,18 +19,18 @@
  * round-tripped through a double.
  *
  * One assumption is worth saying out loud: this is a USDT pair, and the
- * normalised field is `priceUsd`. Kertel treats one USDT as one dollar, exactly
+ * normalised field is `priceUsd`. Telt treats one USDT as one dollar, exactly
  * as CoinGecko and CoinMarketCap do when they quote a USD price for an asset
  * that mostly trades against USDT. If USDT ever moved far off its peg, the
  * venue price and the two aggregator prices would diverge, the planner's 100 bps
- * agreement test would fail, and Kertel would refuse to propose a trade. That is
+ * agreement test would fail, and Telt would refuse to propose a trade. That is
  * the correct behaviour, and it falls out of the design rather than needing a
  * depeg check of its own.
  */
 
-import { ok } from "@kertel/core/domain";
-import type { Refusal, Result } from "@kertel/core/domain";
-import type { PaidRequest } from "@kertel/x402";
+import { ok } from "@telt/core/domain";
+import type { Refusal, Result } from "@telt/core/domain";
+import type { PaidRequest } from "@telt/x402";
 
 import type { AdapterContext, Normalized, ProviderAdapter } from "./types.js";
 import { decimalFromJson, positiveDecimalFromJson } from "./decimal.js";

@@ -1,4 +1,4 @@
-# Kertel on a VPS.
+# Telt on a VPS.
 #
 #   docker compose up -d          start the daemon
 #   docker compose logs -f        watch it work
@@ -8,19 +8,19 @@
 # baked into the image and never committed.
 
 services:
-  kertel:
+  telt:
     build: .
-    image: kertel:latest
-    container_name: kertel
+    image: telt:latest
+    container_name: telt
     restart: unless-stopped
     env_file: [.env]
     environment:
-      KERTEL_DATA_DIR: /data
+      TELT_DATA_DIR: /data
     volumes:
       # Named, not bind-mounted: the database must outlive both the container
       # and the image, and a stray `docker compose down -v` is the only thing
       # that should ever remove it.
-      - kertel-state:/data
+      - telt-state:/data
     # A trading agent has no reason to hold a machine's memory or CPU hostage.
     deploy:
       resources:
@@ -33,4 +33,4 @@ services:
         max-file: "5"
 
 volumes:
-  kertel-state:
+  telt-state:

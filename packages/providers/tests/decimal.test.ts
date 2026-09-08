@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import * as fp from "@kertel/core/money";
+import * as fp from "@telt/core/money";
 
 import { decimalFromJson, positiveDecimalFromJson } from "../src/decimal.js";
 

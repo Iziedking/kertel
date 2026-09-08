@@ -1,5 +1,5 @@
 /**
- * The entities Kertel reasons about.
+ * The entities Telt reasons about.
  *
  * These mirror the SQLite schema in the plan, with one difference that matters:
  * every money value is a `FixedPoint`, never a string or a number. Strings are
@@ -248,7 +248,7 @@ export type ProposalStatus =
  *
  * Stored hashed, bound to one sender and one proposal hash, and short-lived.
  * The plaintext form the user types (`KTL-4821`) exists only in the outbound
- * message and in the user's chat; Kertel keeps the hash.
+ * message and in the user's chat; Telt keeps the hash.
  */
 export type ConfirmationToken = {
   readonly tokenHash: string;

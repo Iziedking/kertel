@@ -18,9 +18,9 @@
  * a normaliser test against a saved response.
  */
 
-import { refuse } from "@kertel/core/domain";
-import type { Refusal, Result } from "@kertel/core/domain";
-import type { PaidRequest } from "@kertel/x402";
+import { refuse } from "@telt/core/domain";
+import type { Refusal, Result } from "@telt/core/domain";
+import type { PaidRequest } from "@telt/x402";
 
 import type { AdapterContext, Normalized, ProviderAdapter } from "./types.js";
 
@@ -34,7 +34,7 @@ export const thegraphPoolAdapter: ProviderAdapter = {
   buildRequest(context: AdapterContext): Result<PaidRequest, Refusal> {
     return refuse(
       "PROVIDER_UNAVAILABLE",
-      `No published subgraph is configured for ${context.instrument.symbol}, so Kertel has no onchain pool detail to buy.`,
+      `No published subgraph is configured for ${context.instrument.symbol}, so Telt has no onchain pool detail to buy.`,
       { provider: "thegraph", symbol: context.instrument.symbol },
     );
   },

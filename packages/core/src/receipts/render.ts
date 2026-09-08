@@ -1,7 +1,7 @@
 /**
  * What the user actually reads.
  *
- * Everything else in Kertel exists to make this message honest. A research
+ * Everything else in Telt exists to make this message honest. A research
  * agent that answers "ETH looks bullish" has told you nothing you can check; a
  * receipt says which sources were read, what they cost, which ones were *not*
  * read and why, and what would have to be true for the conclusion to be wrong.
@@ -13,7 +13,7 @@
  *    cheap run legible. Without it a one-cent run looks lazy rather than
  *    disciplined.
  * 2. **An absence is never rendered as a zero.** A source that did not answer
- *    says so. A figure Kertel does not have is left out, not defaulted.
+ *    says so. A figure Telt does not have is left out, not defaulted.
  * 3. **It is written for a phone.** Short lines, no tables, no markdown that
  *    WhatsApp will render as literal asterisks in the middle of a number.
  *
@@ -370,7 +370,7 @@ export function renderProposal(input: ProposalReceiptInput): string {
   lines.push("");
 
   lines.push(
-    `Worst fill Kertel will accept: ${fp.format(fp.trim(input.worstPrice, 2))} (${String(input.maxSlippageBps)} bps)`,
+    `Worst fill Telt will accept: ${fp.format(fp.trim(input.worstPrice, 2))} (${String(input.maxSlippageBps)} bps)`,
   );
   lines.push("");
 

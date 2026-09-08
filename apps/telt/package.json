@@ -1,0 +1,29 @@
+{
+  "name": "telt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Telt as an OpenClaw plugin: telt_* agent tools over the deterministic core.",
+  "main": "./dist/index.js",
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "$comment": "OpenClaw installs plugin dependencies with `npm install --ignore-scripts`, so nothing here may need a native build step. That rules out better-sqlite3 and is why storage uses node:sqlite, which ships with Node 22.",
+  "scripts": {
+    "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@telt/core": "0.1.0",
+    "@telt/providers": "0.1.0",
+    "@telt/x402": "0.1.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@sinclair/typebox": "0.34.52",
+    "zod": "3.25.76"
+  },
+  "bin": {
+    "telt-mcp": "./dist/mcp.js",
+    "telt-daemon": "./dist/daemon.js"
+  }
+}

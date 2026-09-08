@@ -346,7 +346,7 @@ describe("proposal gate", () => {
   });
 
   it("refuses a price stamped in the future", () => {
-    // Clock skew between Kertel and the exchange must fail closed, not open.
+    // Clock skew between Telt and the exchange must fail closed, not open.
     expect(
       refusalCode(
         evaluateProposal({

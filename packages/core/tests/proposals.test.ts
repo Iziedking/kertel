@@ -183,7 +183,7 @@ describe("proposal hashing", () => {
       proposal({ limitPrice: fp.parse("2400.00") }),
       proposal({ expiresAt: at(121) }),
       proposal({ evidenceDigest: "sha256:different" }),
-      proposal({ policyVersion: "kertel-policy-2" }),
+      proposal({ policyVersion: "telt-policy-2" }),
     ];
     for (const mutated of mutations) {
       expect(hashProposal(mutated, fakeHash), JSON.stringify(mutated.id)).not.toBe(original);

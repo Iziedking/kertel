@@ -1,7 +1,7 @@
 /**
  * The fixture buyer. Fixture mode's whole footprint on the research path.
  *
- * Kertel has to run with no keys and no network — that is how the suite runs,
+ * Telt has to run with no keys and no network — that is how the suite runs,
  * how the demo runs, and how anyone reviewing this repo can see it work without
  * being handed a funded wallet. The temptation in that situation is to write a
  * stub that returns a canned observation and skips the payment layer entirely,
@@ -12,7 +12,7 @@
  * still runs the checks that matter, against the same functions the live client
  * calls:
  *
- *   - `pinFor` and `assertHostMatchesPin` — the merchant must be one Kertel
+ *   - `pinFor` and `assertHostMatchesPin` — the merchant must be one Telt
  *     knows, reached over https at the exact host that was pinned.
  *   - `readChallenge` — header first, then body, because both shapes are live.
  *   - `selectPaymentOption` — ranked rails, `eip3009` only, permit2 refused, the
@@ -23,14 +23,14 @@
  *
  * What that buys: a fixture test that feeds in CoinMarketCap's real saved
  * challenge, with permit2 first in its `accepts` list and eighteen-decimal
- * amounts, and watches Kertel pick the right option — with no wallet anywhere
+ * amounts, and watches Telt pick the right option — with no wallet anywhere
  * near it. A stub could not fail that test, which is precisely why it would not
  * be worth running.
  */
 
-import * as fp from "@kertel/core/money";
-import { ok, refuse } from "@kertel/core/domain";
-import type { Refusal, Result } from "@kertel/core/domain";
+import * as fp from "@telt/core/money";
+import { ok, refuse } from "@telt/core/domain";
+import type { Refusal, Result } from "@telt/core/domain";
 
 import {
   assertHostMatchesPin,
@@ -216,7 +216,7 @@ export function createFixtureX402Client(config: FixtureClientConfig): X402Client
       if (!walletConfigured) {
         return refuse(
           "X402_WALLET_NOT_CONFIGURED",
-          "No research wallet is configured, so Kertel cannot buy paid evidence.",
+          "No research wallet is configured, so Telt cannot buy paid evidence.",
         );
       }
 
@@ -229,7 +229,7 @@ export function createFixtureX402Client(config: FixtureClientConfig): X402Client
       if (resolved.value.kind === "free") {
         return refuse(
           "X402_NO_ACCEPTABLE_OPTION",
-          `${request.providerId} stopped charging for this endpoint. Kertel did not pay; ask again to read it for free.`,
+          `${request.providerId} stopped charging for this endpoint. Telt did not pay; ask again to read it for free.`,
           { provider: request.providerId },
         );
       }
@@ -248,7 +248,7 @@ export function createFixtureX402Client(config: FixtureClientConfig): X402Client
       if (quote.payTo.toLowerCase() !== approved.quote.payTo.toLowerCase()) {
         return refuse(
           "X402_RECIPIENT_MISMATCH",
-          "The recipient changed between the quote and the payment, so Kertel signed nothing.",
+          "The recipient changed between the quote and the payment, so Telt signed nothing.",
           { approved: approved.quote.payTo, offered: quote.payTo },
         );
       }
@@ -259,7 +259,7 @@ export function createFixtureX402Client(config: FixtureClientConfig): X402Client
         // and that is exactly what the user is told.
         return refuse(
           "X402_PAYMENT_UNKNOWN",
-          `Kertel signed a payment to ${request.providerId} and did not get an answer. It will not retry until that is resolved.`,
+          `Telt signed a payment to ${request.providerId} and did not get an answer. It will not retry until that is resolved.`,
           { provider: request.providerId, amount: fp.format(quote.amount) },
         );
       }

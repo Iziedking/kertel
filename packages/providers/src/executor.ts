@@ -12,12 +12,12 @@
  *   - **Money moved and the data is unusable.** The call was paid for and the
  *     answer did not normalise. Cost is the amount paid, status `invalid`. The
  *     spend is real and must appear in the budget and in the receipt even
- *     though Kertel got nothing for it. Quietly zeroing that is how a daily cap
+ *     though Telt got nothing for it. Quietly zeroing that is how a daily cap
  *     stops meaning anything.
  *   - **Money may or may not have moved.** A payment was signed and no answer
  *     came back. Charged against the budget as if it settled, because the
  *     pessimistic assumption is the only one that cannot overspend — and then
- *     the run stops buying. An unresolved payment means Kertel cannot say what
+ *     the run stops buying. An unresolved payment means Telt cannot say what
  *     it has spent, and a budget it cannot count is not a budget. The attempt
  *     is surfaced on `unresolvedPayment()` so the caller can persist it, engage
  *     the safety state, and reconcile it against the chain later. Free evidence
@@ -28,9 +28,9 @@
  * the provider's actual price is the one that has to clear the caps.
  */
 
-import * as fp from "@kertel/core/money";
-import type { FixedPoint } from "@kertel/core/money";
-import { KertelDefect, addSeconds, refuse } from "@kertel/core/domain";
+import * as fp from "@telt/core/money";
+import type { FixedPoint } from "@telt/core/money";
+import { TeltDefect, addSeconds, refuse } from "@telt/core/domain";
 import type {
   Clock,
   EvidenceId,
@@ -39,11 +39,11 @@ import type {
   Instant,
   PaymentAttemptId,
   Refusal,
-} from "@kertel/core/domain";
-import { evaluatePaidCall } from "@kertel/core/policy";
-import type { Policy } from "@kertel/core/policy";
-import type { RecipeStep, StepExecutor } from "@kertel/core/research";
-import type { Hasher, PaidRequest, X402Client, X402Quote } from "@kertel/x402";
+} from "@telt/core/domain";
+import { evaluatePaidCall } from "@telt/core/policy";
+import type { Policy } from "@telt/core/policy";
+import type { RecipeStep, StepExecutor } from "@telt/core/research";
+import type { Hasher, PaidRequest, X402Client, X402Quote } from "@telt/x402";
 
 import { adapterFor } from "./registry.js";
 import type { InstrumentIds } from "./symbols.js";
@@ -54,7 +54,7 @@ const FREE_CALL_TIMEOUT_MS = 8_000;
 /**
  * One line per paid attempt, whatever the outcome.
  *
- * Written even when the call failed, because "Kertel tried to buy this and
+ * Written even when the call failed, because "Telt tried to buy this and
  * could not" is the part of a cheap run a user most needs to see. Receipts are
  * built from these.
  */
@@ -103,7 +103,7 @@ export type ResearchExecution = {
   /**
    * The payment that was signed and never answered, if one was.
    *
-   * Set means the run stopped buying and there is an amount Kertel cannot
+   * Set means the run stopped buying and there is an amount Telt cannot
    * account for. The caller is expected to persist it and engage the safety
    * state; a reconciliation pass resolves it later against the chain.
    */
@@ -122,7 +122,7 @@ function normalizedRefusal(refusal: Refusal): Normalized {
 function unrecognised(provider: string, paidNote: string): Refusal {
   return refuse(
     "PROVIDER_UNAVAILABLE",
-    `${provider}${paidNote} answered in a shape Kertel does not recognise.`,
+    `${provider}${paidNote} answered in a shape Telt does not recognise.`,
     { provider },
   ).error;
 }
@@ -254,7 +254,7 @@ export function makeStepExecutor(config: ExecutorConfig): ResearchExecution {
     adapter: ProviderAdapter,
     request: PaidRequest,
   ): Promise<{ observation: EvidenceObservation; cost: FixedPoint }> {
-    // An earlier call in this run was signed and never answered. Kertel does
+    // An earlier call in this run was signed and never answered. Telt does
     // not know whether that money moved, so it does not know what it has left,
     // and buying more on an uncountable budget is how a cap gets exceeded while
     // every individual check passes. Free evidence still flows.
@@ -263,7 +263,7 @@ export function makeStepExecutor(config: ExecutorConfig): ResearchExecution {
         step,
         refuse(
           "X402_PAYMENT_UNRESOLVED",
-          "An earlier payment in this run was signed and never confirmed, so Kertel stopped buying evidence until that is resolved.",
+          "An earlier payment in this run was signed and never confirmed, so Telt stopped buying evidence until that is resolved.",
           { provider: step.provider, unresolvedAttempt: unresolved },
         ).error,
         request.url,
@@ -288,7 +288,7 @@ export function makeStepExecutor(config: ExecutorConfig): ResearchExecution {
       return unavailable(step, quoted.error, request.url);
     }
 
-    // A provider that stopped charging is a real event, not an error. Kertel
+    // A provider that stopped charging is a real event, not an error. Telt
     // takes the free answer and reports that the call cost nothing.
     if (quoted.value.kind === "free") {
       const free = quoted.value.response;
@@ -436,7 +436,7 @@ export function makeStepExecutor(config: ExecutorConfig): ResearchExecution {
     if (adapter === undefined) {
       // `assertRegistryCoversRecipes` runs at startup precisely so this cannot
       // be reached with money already spent.
-      throw new KertelDefect(`no provider adapter for recipe step ${step.id}`);
+      throw new TeltDefect(`no provider adapter for recipe step ${step.id}`);
     }
 
     const built = adapter.buildRequest({ instrument: config.instrument });

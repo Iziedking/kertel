@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import * as fp from "@kertel/core/money";
-import type { Symbol_ } from "@kertel/core/domain";
-import { readPrice } from "@kertel/core/research";
-import type { EvidenceObservation } from "@kertel/core/domain";
-import { instant, seconds, addSeconds } from "@kertel/core/domain";
+import * as fp from "@telt/core/money";
+import type { Symbol_ } from "@telt/core/domain";
+import { readPrice } from "@telt/core/research";
+import type { EvidenceObservation } from "@telt/core/domain";
+import { instant, seconds, addSeconds } from "@telt/core/domain";
 
 import { binancePriceAdapter } from "../src/binance.js";
 import { coingeckoPriceAdapter } from "../src/coingecko.js";

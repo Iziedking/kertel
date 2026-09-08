@@ -11,7 +11,7 @@ money and one credential.
 
 ## 1. Create the Binance API key (5 minutes)
 
-Kertel trades through an ordinary Binance API key, **not** the Agent OS MCP
+Telt trades through an ordinary Binance API key, **not** the Agent OS MCP
 server. The MCP server authorises over OAuth with a browser redirect, and a
 long-running gateway cannot re-run a browser flow or borrow another client's
 credential.
@@ -33,17 +33,17 @@ box unticked.
 Then put both halves in `.env`:
 
 ```
-KERTEL_BINANCE_API_KEY=...
-KERTEL_BINANCE_API_SECRET=...
+TELT_BINANCE_API_KEY=...
+TELT_BINANCE_API_SECRET=...
 ```
 
-Kertel refuses to start if only one is set, or if the key equals
-`KERTEL_X402_PRIVATE_KEY` — the research wallet spends cents on data and the
+Telt refuses to start if only one is set, or if the key equals
+`TELT_X402_PRIVATE_KEY` — the research wallet spends cents on data and the
 exchange key can move the trading balance, so one leak must not be both.
 
 ---
 
-## 2. Fund the two things Kertel spends
+## 2. Fund the two things Telt spends
 
 They are separate on purpose and have different blast radii.
 
@@ -62,14 +62,14 @@ must be moved there deliberately at
 `https://www.binance.com/en/my/sub-account/asset-management/transfer`.
 
 The tradeable window is narrow: Binance's own minimum is **5.00 USDT** and
-`KERTEL_MAX_TRADE_NOTIONAL` is 25. Fund at least 30 USDT so a couple of orders
+`TELT_MAX_TRADE_NOTIONAL` is 25. Fund at least 30 USDT so a couple of orders
 fit.
 
 ---
 
 ## 3. Rehearse before you arm it
 
-Leave `KERTEL_MODE=fixture`. Message the bot from `+2348067053854`:
+Leave `TELT_MODE=fixture`. Message the bot from `+2348067053854`:
 
 ```
 status
@@ -93,12 +93,12 @@ about what was left unspent is real.
 ## 4. Arm it
 
 ```
-KERTEL_MODE=live
-KERTEL_LIVE_EXECUTION=true
+TELT_MODE=live
+TELT_LIVE_EXECUTION=true
 ```
 
-Both. `KERTEL_MODE=live` alone still refuses; so does the flag alone. Anything
-other than exactly `true` or `false` in `KERTEL_LIVE_EXECUTION` is a startup
+Both. `TELT_MODE=live` alone still refuses; so does the flag alone. Anything
+other than exactly `true` or `false` in `TELT_LIVE_EXECUTION` is a startup
 error rather than a quiet "off", because somebody who wrote `yes` believes
 trading is on.
 
@@ -106,7 +106,7 @@ Restart the gateway, then:
 
 ```
 openclaw config validate
-openclaw plugins list        # Kertel should say "loaded"
+openclaw plugins list        # Telt should say "loaded"
 ```
 
 Message `status` and confirm it reads:
@@ -125,12 +125,12 @@ the price in the proposal.
 
 | What you see | What to do |
 | --- | --- |
-| `EXECUTION_RESULT_UNKNOWN` | Kertel already stopped itself. Run `kertel_reconcile` — it asks the exchange what actually happened, using the client order id it chose before sending. Then `kertel_resume`. |
-| `X402_PAYMENT_UNKNOWN` | A research payment was signed with no confirmation. Kertel stopped itself and charged the amount pessimistically. Check the payer address on the chain explorer, then reconcile. |
-| Anything that looks wrong | `kertel_stop` with a reason. It survives a restart. |
+| `EXECUTION_RESULT_UNKNOWN` | Telt already stopped itself. Run `telt_reconcile` — it asks the exchange what actually happened, using the client order id it chose before sending. Then `telt_resume`. |
+| `X402_PAYMENT_UNKNOWN` | A research payment was signed with no confirmation. Telt stopped itself and charged the amount pessimistically. Check the payer address on the chain explorer, then reconcile. |
+| Anything that looks wrong | `telt_stop` with a reason. It survives a restart. |
 
-`kertel_resume` refuses while anything is unreconciled. That is deliberate: the
-kill switch engaged because Kertel lost track of money, and resuming without
+`telt_resume` refuses while anything is unreconciled. That is deliberate: the
+kill switch engaged because Telt lost track of money, and resuming without
 finding it just resumes the uncertainty.
 
 ---
@@ -139,7 +139,7 @@ finding it just resumes the uncertainty.
 
 Stated plainly so nothing here is a surprise:
 
-- **The model does not write a thesis yet.** `kertel_research` returns evidence
+- **The model does not write a thesis yet.** `telt_research` returns evidence
   and says there is no thesis, rather than inventing one.
 - **Realised loss and open exposure are passed as zero** to the proposal gate.
   The daily-loss and exposure caps therefore do not bite yet. The per-trade cap

@@ -17,19 +17,19 @@
 
 process.loadEnvFile?.(".env");
 // Before loadConfig reads it. Everything below is a read.
-process.env["KERTEL_MODE"] = "fixture";
-process.env["KERTEL_LIVE_EXECUTION"] = "false";
+process.env["TELT_MODE"] = "fixture";
+process.env["TELT_LIVE_EXECUTION"] = "false";
 
-import * as fp from "@kertel/core/money";
-import { loadConfig } from "../apps/kertel-plugin/src/infra/config.js";
-import { createRuntime } from "../apps/kertel-plugin/src/runtime.js";
+import * as fp from "@telt/core/money";
+import { loadConfig } from "../apps/telt/src/infra/config.js";
+import { createRuntime } from "../apps/telt/src/runtime.js";
 
 async function main(): Promise<void> {
   const runtime = createRuntime({ config: loadConfig(process.env) });
 
   console.log(`execution rail: ${runtime.executionRail} | futures client: ${runtime.futures !== null}`);
   if (runtime.futures === null) {
-    console.log("\nNo futures client. Futures runs through Agent OS only; set KERTEL_BINANCE_MCP_TOKEN.");
+    console.log("\nNo futures client. Futures runs through Agent OS only; set TELT_BINANCE_MCP_TOKEN.");
     return;
   }
 

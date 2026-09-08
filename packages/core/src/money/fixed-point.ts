@@ -1,6 +1,6 @@
 /**
  * Fixed-point decimal arithmetic for every price, quantity, notional, fee and
- * payment value in Kertel.
+ * payment value in Telt.
  *
  * The second consumer of this module is `scripts/prove.ts`, so it stays pure:
  * no imports, no clock, no environment. That constraint is checkable, which is

@@ -1,18 +1,18 @@
 {
-  "name": "@kertel/providers",
+  "name": "@telt/providers",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": {
-      "kertel-source": "./src/index.ts",
+      "telt-source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
   },
   "$comment": "Adapters that turn one recipe step into one normalised observation. Every request URL is built here from a closed table; nothing in this package accepts a URL, a symbol id or a body from a message or a model. Validation is hand-written rather than zod so a malformed payload becomes a null and then an honest `invalid` observation, never a thrown error in the middle of a paid call.",
   "dependencies": {
-    "@kertel/core": "0.1.0",
-    "@kertel/x402": "0.1.0"
+    "@telt/core": "0.1.0",
+    "@telt/x402": "0.1.0"
   }
 }

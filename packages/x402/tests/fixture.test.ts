@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import * as fp from "@kertel/core/money";
+import * as fp from "@telt/core/money";
 
 import { createFixtureX402Client } from "../src/fixture.js";
 import type { FixtureExchange } from "../src/fixture.js";

@@ -2,7 +2,7 @@
  * A free, unsigned check that the research loop can actually run.
  *
  * `probe:providers` proves the payment side: that every merchant still answers
- * with a 402 Kertel can read, on a rail it will pay, at the price it expects.
+ * with a 402 Telt can read, on a rail it will pay, at the price it expects.
  * This proves the other half — that the free venue read works against the live
  * exchange, that every recipe step has an adapter behind it, and that the whole
  * ladder walks end to end and stops where it should.
@@ -18,19 +18,19 @@
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
-import * as fp from "@kertel/core/money";
-import { systemClock } from "@kertel/core/domain";
-import type { EvidenceId, PaymentAttemptId, Symbol_ } from "@kertel/core/domain";
-import { defaultPolicy } from "@kertel/core/policy";
-import { runPlan, stepById } from "@kertel/core/research";
-import type { PlannerState, ResearchGoal } from "@kertel/core/research";
-import { createFixtureX402Client } from "@kertel/x402";
-import type { FixtureExchange } from "@kertel/x402";
+import * as fp from "@telt/core/money";
+import { systemClock } from "@telt/core/domain";
+import type { EvidenceId, PaymentAttemptId, Symbol_ } from "@telt/core/domain";
+import { defaultPolicy } from "@telt/core/policy";
+import { runPlan, stepById } from "@telt/core/research";
+import type { PlannerState, ResearchGoal } from "@telt/core/research";
+import { createFixtureX402Client } from "@telt/x402";
+import type { FixtureExchange } from "@telt/x402";
 import {
   assertRegistryCoversRecipes,
   instrumentFor,
   makeStepExecutor,
-} from "@kertel/providers";
+} from "@telt/providers";
 
 const SYMBOL = "ETHUSDT" as Symbol_;
 const hash = (input: string): string => createHash("sha256").update(input).digest("hex");
@@ -131,7 +131,7 @@ function stateFor(goal: ResearchGoal): PlannerState {
 }
 
 async function main(): Promise<void> {
-  console.log("Kertel adapter probe. Free, and nothing is signed.\n");
+  console.log("Telt adapter probe. Free, and nothing is signed.\n");
 
   assertRegistryCoversRecipes();
   console.log("registry      every recipe step has an adapter behind it");

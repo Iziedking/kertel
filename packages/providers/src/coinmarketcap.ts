@@ -12,7 +12,7 @@
  * A ticker is ambiguous — several listed assets answer to `ETH` — and asking by
  * one means the reply has to be disambiguated on the way back, at exactly the
  * moment a wrong guess turns into a price an order is sized from. An id removes
- * the question from both ends: Kertel asks for 1027, reads `data["1027"]`, and
+ * the question from both ends: Telt asks for 1027, reads `data["1027"]`, and
  * checks the entry's own `id` and `symbol` agree before believing any of it.
  *
  * One caveat kept honest, because it is the only shape in this package not
@@ -31,9 +31,9 @@
  * and pin the shape down to the one that actually arrived.
  */
 
-import { ok, refuse } from "@kertel/core/domain";
-import type { Refusal, Result } from "@kertel/core/domain";
-import type { PaidRequest } from "@kertel/x402";
+import { ok, refuse } from "@telt/core/domain";
+import type { Refusal, Result } from "@telt/core/domain";
+import type { PaidRequest } from "@telt/x402";
 
 import type { AdapterContext, Normalized, ProviderAdapter } from "./types.js";
 import { positiveDecimalFromJson } from "./decimal.js";
@@ -82,7 +82,7 @@ export const coinmarketcapPriceAdapter: ProviderAdapter = {
     if (id === null) {
       return refuse(
         "PROVIDER_UNAVAILABLE",
-        `No verified CoinMarketCap id for ${context.instrument.symbol}. A ticker is ambiguous there, so Kertel will not guess one.`,
+        `No verified CoinMarketCap id for ${context.instrument.symbol}. A ticker is ambiguous there, so Telt will not guess one.`,
         { provider: "coinmarketcap", symbol: context.instrument.symbol },
       );
     }

@@ -11,7 +11,7 @@
       "path": "./packages/providers"
     },
     {
-      "path": "./apps/kertel-plugin"
+      "path": "./apps/telt"
     }
   ]
 }

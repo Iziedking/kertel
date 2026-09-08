@@ -1,9 +1,9 @@
 /**
- * The complete catalogue of calls Kertel can make.
+ * The complete catalogue of calls Telt can make.
  *
  * This list is the entire attack surface of the research loop. There is no code
  * path anywhere that turns a WhatsApp message or a model output into a URL, so
- * a prompt injection cannot make Kertel pay an endpoint that is not written
+ * a prompt injection cannot make Telt pay an endpoint that is not written
  * here. Adding a step is a deliberate edit with a price next to it.
  *
  * Steps are grouped into tiers by what they cost and what they are worth:
@@ -11,7 +11,7 @@
  *   Tier 0  free      Binance public market data, and the operator's own
  *                     Binance Agentic Wallet signals. Always tried first.
  *   Tier 1  $0.01     One independent market cross-check. Proves the price
- *                     Kertel is about to size an order from is not one
+ *                     Telt is about to size an order from is not one
  *                     venue's opinion.
  *   Tier 2  $0.05     Nansen Smart Money flows. The only evidence that speaks
  *                     to conviction rather than price, and the dearest call in

@@ -1,5 +1,5 @@
 /**
- * The limits Kertel enforces, and the version stamp that goes on every decision.
+ * The limits Telt enforces, and the version stamp that goes on every decision.
  *
  * These values arrive from configuration. They never arrive from a WhatsApp
  * message, a model output, or a provider response. That is the whole point: the
@@ -13,7 +13,7 @@
 
 import type { FixedPoint } from "../money/fixed-point.js";
 import * as fp from "../money/fixed-point.js";
-import { KertelDefect } from "../domain/result.js";
+import { TeltDefect } from "../domain/result.js";
 import type { Seconds } from "../domain/time.js";
 import { seconds } from "../domain/time.js";
 import type { Symbol_ } from "../domain/types.js";
@@ -86,7 +86,7 @@ export const DEFAULT_FRESHNESS: Readonly<Record<string, Seconds>> = Object.freez
  */
 export function defaultPolicy(): Policy {
   return {
-    version: "kertel-policy-1",
+    version: "telt-policy-1",
     trading: {
       allowedSymbols: ["ETHUSDT", "BTCUSDT"] as readonly string[] as readonly Symbol_[],
       maxTradeNotional: fp.parse("25.00"),
@@ -169,6 +169,6 @@ export function validatePolicy(policy: Policy): void {
   }
 
   if (problems.length > 0) {
-    throw new KertelDefect(`policy is not enforceable:\n  - ${problems.join("\n  - ")}`);
+    throw new TeltDefect(`policy is not enforceable:\n  - ${problems.join("\n  - ")}`);
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { KertelDefect } from "../src/domain/result.js";
+import { TeltDefect } from "../src/domain/result.js";
 import { seconds } from "../src/domain/time.js";
 import type { ProposalId } from "../src/domain/types.js";
 import {
@@ -46,7 +46,7 @@ describe("code generation", () => {
 
   it("refuses a random source that short-changes it rather than padding", () => {
     const starved = (): Uint8Array => Uint8Array.from([1, 2]);
-    expect(() => generateConfirmationCode(starved)).toThrow(KertelDefect);
+    expect(() => generateConfirmationCode(starved)).toThrow(TeltDefect);
   });
 });
 
@@ -122,7 +122,7 @@ describe("hashing a code", () => {
   it("refuses to hash a code it could not parse", () => {
     expect(() =>
       hashConfirmationCode({ code: "yes", proposalHash: "sha256:proposal-a", hash: fakeHash }),
-    ).toThrow(KertelDefect);
+    ).toThrow(TeltDefect);
   });
 });
 
@@ -190,7 +190,7 @@ describe("issuing a token", () => {
         random: fixedRandom(1),
         hash: fakeHash,
       }),
-    ).toThrow(KertelDefect);
+    ).toThrow(TeltDefect);
   });
 
   it("stores a hash that a later lookup can reproduce from the typed code", () => {
@@ -213,11 +213,11 @@ describe("consuming and revoking", () => {
 
   it("treats a second consume as a defect, because the gate should have refused it", () => {
     const consumed = consumeConfirmationToken(token(), at(30));
-    expect(() => consumeConfirmationToken(consumed, at(31))).toThrow(KertelDefect);
+    expect(() => consumeConfirmationToken(consumed, at(31))).toThrow(TeltDefect);
   });
 
   it("refuses to consume a revoked token", () => {
-    expect(() => consumeConfirmationToken(token({ status: "revoked" }), at(30))).toThrow(KertelDefect);
+    expect(() => consumeConfirmationToken(token({ status: "revoked" }), at(30))).toThrow(TeltDefect);
   });
 
   it("revokes an active token, which is what `stop` does to every outstanding code", () => {

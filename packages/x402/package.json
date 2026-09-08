@@ -1,18 +1,18 @@
 {
-  "name": "@kertel/x402",
+  "name": "@telt/x402",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": {
-      "kertel-source": "./src/index.ts",
+      "telt-source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
   },
   "$comment": "The only module allowed to sign a payment. Pins are exact; see docs/feedback.md for why the unscoped `x402` package cannot be used.",
   "dependencies": {
-    "@kertel/core": "0.1.0",
+    "@telt/core": "0.1.0",
     "@x402/core": "2.25.0",
     "@x402/evm": "2.25.0",
     "viem": "2.56.3"

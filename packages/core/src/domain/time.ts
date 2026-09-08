@@ -9,7 +9,7 @@
  * timezone is a budget that resets at the wrong moment.
  */
 
-import { KertelDefect } from "./result.js";
+import { TeltDefect } from "./result.js";
 
 /** Milliseconds since the Unix epoch, UTC. */
 export type Instant = number & { readonly __brand: "Instant" };
@@ -19,14 +19,14 @@ export type Seconds = number & { readonly __brand: "Seconds" };
 
 export function instant(epochMillis: number): Instant {
   if (!Number.isInteger(epochMillis) || epochMillis < 0) {
-    throw new KertelDefect(`instant must be a non-negative integer, received ${String(epochMillis)}`);
+    throw new TeltDefect(`instant must be a non-negative integer, received ${String(epochMillis)}`);
   }
   return epochMillis as Instant;
 }
 
 export function seconds(value: number): Seconds {
   if (!Number.isInteger(value) || value < 0) {
-    throw new KertelDefect(`seconds must be a non-negative integer, received ${String(value)}`);
+    throw new TeltDefect(`seconds must be a non-negative integer, received ${String(value)}`);
   }
   return value as Seconds;
 }
@@ -35,7 +35,7 @@ export function seconds(value: number): Seconds {
 export function parseInstant(iso: string): Instant {
   const parsed = Date.parse(iso);
   if (Number.isNaN(parsed)) {
-    throw new KertelDefect(`not a parseable instant: ${JSON.stringify(iso)}`);
+    throw new TeltDefect(`not a parseable instant: ${JSON.stringify(iso)}`);
   }
   return instant(parsed);
 }
@@ -72,13 +72,13 @@ export function utcDay(value: Instant): string {
   const iso = new Date(value).toISOString();
   const day = iso.slice(0, 10);
   if (day.length !== 10) {
-    throw new KertelDefect(`could not derive a UTC day from ${iso}`);
+    throw new TeltDefect(`could not derive a UTC day from ${iso}`);
   }
   return day;
 }
 
 /**
- * The only way anything in Kertel learns the time.
+ * The only way anything in Telt learns the time.
  *
  * The live implementation wraps `Date.now`. Tests pass a clock they control, so
  * "the token expired ninety-one seconds after it was issued" is a one-line

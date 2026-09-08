@@ -9,14 +9,14 @@
  *    and in the response body for CoinMarketCap and Nansen. Both are live.
  * 2. Providers offer up to eight payment options across four chains and five
  *    assets. Taking the first one, as the default selector does, would have
- *    Kertel signing a permit2 allowance on BSC.
+ *    Telt signing a permit2 allowance on BSC.
  */
 
 import type { PaymentRequired, PaymentRequirements } from "@x402/core/types";
-import * as fp from "@kertel/core/money";
-import type { FixedPoint } from "@kertel/core/money";
-import type { Refusal, Result } from "@kertel/core/domain";
-import { ok, refuse } from "@kertel/core/domain";
+import * as fp from "@telt/core/money";
+import type { FixedPoint } from "@telt/core/money";
+import type { Refusal, Result } from "@telt/core/domain";
+import { ok, refuse } from "@telt/core/domain";
 
 import {
   ACCEPTED_TRANSFER_METHOD,
@@ -75,7 +75,7 @@ export function readChallenge(input: {
     } catch {
       return refuse(
         "X402_NO_ACCEPTABLE_OPTION",
-        "The provider sent a payment-required header Kertel could not decode.",
+        "The provider sent a payment-required header Telt could not decode.",
       );
     }
     if (!looksLikeChallenge(decoded)) {
@@ -93,7 +93,7 @@ export function readChallenge(input: {
 
   return refuse(
     "X402_NO_ACCEPTABLE_OPTION",
-    "The provider asked for payment but sent no challenge Kertel could read.",
+    "The provider asked for payment but sent no challenge Telt could read.",
   );
 }
 
@@ -136,7 +136,7 @@ export type SelectedOption = {
  * Choose the rail to pay over, and refuse rather than settle for a near miss.
  *
  * Rails are tried in preference order, so where a provider takes Binance's own
- * B402 rail Kertel uses it, and falls back to Base USDC only where it must. The
+ * B402 rail Telt uses it, and falls back to Base USDC only where it must. The
  * amount is read at the chosen rail's decimals: the BSC stablecoins carry 18
  * and Base USDC carries 6, and reading one at the other's scale is the
  * difference between a cent and ten thousand dollars.
@@ -175,7 +175,7 @@ export function selectPaymentOption(input: {
     if (!sameAddress(chosen.payTo, input.pin.payTo)) {
       return refuse(
         "X402_RECIPIENT_MISMATCH",
-        "The provider asked Kertel to pay an address it does not recognise, so nothing was signed.",
+        "The provider asked Telt to pay an address it does not recognise, so nothing was signed.",
         { expected: input.pin.payTo, offered: chosen.payTo, host: input.pin.host, rail: rail.id },
       );
     }
@@ -190,7 +190,7 @@ export function selectPaymentOption(input: {
     } catch {
       return refuse(
         "X402_NO_ACCEPTABLE_OPTION",
-        "The provider quoted an amount Kertel could not read as an exact integer.",
+        "The provider quoted an amount Telt could not read as an exact integer.",
         { amount: String(chosen.amount), rail: rail.id },
       );
     }
@@ -203,7 +203,7 @@ export function selectPaymentOption(input: {
 
   return refuse(
     "X402_ASSET_NOT_PINNED",
-    "This provider offers no rail Kertel will sign for: it needs U or USD1 on BNB Smart Chain, or USDC on Base, each with a single-payment authorisation.",
+    "This provider offers no rail Telt will sign for: it needs U or USD1 on BNB Smart Chain, or USDC on Base, each with a single-payment authorisation.",
     {
       offered: offered.length,
       networks: [...new Set(offered.map((option) => option.network))].join(", "),
@@ -216,7 +216,7 @@ export function pinFor(providerId: string): Result<MerchantPin, Refusal> {
   if (pin === undefined) {
     return refuse(
       "X402_RECIPIENT_MISMATCH",
-      `Kertel has no pinned recipient for ${providerId}, so it will not pay it.`,
+      `Telt has no pinned recipient for ${providerId}, so it will not pay it.`,
       { providerId },
     );
   }
@@ -229,10 +229,10 @@ export function assertHostMatchesPin(url: string, pin: MerchantPin): Result<URL,
   try {
     parsed = new URL(url);
   } catch {
-    return refuse("X402_RECIPIENT_MISMATCH", "That is not a URL Kertel can call.", { url });
+    return refuse("X402_RECIPIENT_MISMATCH", "That is not a URL Telt can call.", { url });
   }
   if (parsed.protocol !== "https:") {
-    return refuse("X402_RECIPIENT_MISMATCH", "Kertel only calls paid endpoints over https.", {
+    return refuse("X402_RECIPIENT_MISMATCH", "Telt only calls paid endpoints over https.", {
       protocol: parsed.protocol,
     });
   }

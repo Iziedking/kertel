@@ -3,14 +3,14 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import * as fp from "@kertel/core/money";
-import { fixedClock, instant } from "@kertel/core/domain";
-import type { EvidenceId, PaymentAttemptId, Symbol_ } from "@kertel/core/domain";
-import { defaultPolicy } from "@kertel/core/policy";
-import { RECIPE_STEPS, runPlan, stepById } from "@kertel/core/research";
-import type { PlannerState, RecipeStep } from "@kertel/core/research";
-import { createFixtureX402Client } from "@kertel/x402";
-import type { FixtureExchange } from "@kertel/x402";
+import * as fp from "@telt/core/money";
+import { fixedClock, instant } from "@telt/core/domain";
+import type { EvidenceId, PaymentAttemptId, Symbol_ } from "@telt/core/domain";
+import { defaultPolicy } from "@telt/core/policy";
+import { RECIPE_STEPS, runPlan, stepById } from "@telt/core/research";
+import type { PlannerState, RecipeStep } from "@telt/core/research";
+import { createFixtureX402Client } from "@telt/x402";
+import type { FixtureExchange } from "@telt/x402";
 
 import { makeStepExecutor } from "../src/executor.js";
 import { instrumentFor } from "../src/symbols.js";
@@ -310,7 +310,7 @@ describe("a paid call", () => {
     await executor.execute(requireStep("nansen.netflow"));
     expect(fp.format(executor.spentThisRun())).toBe("0.05");
 
-    // CoinGecko is healthy and affordable. It is refused anyway, because Kertel
+    // CoinGecko is healthy and affordable. It is refused anyway, because Telt
     // no longer knows what it has spent.
     const next = await executor.execute(requireStep("coingecko.price"));
     expect(next.observation.status).toBe("unavailable");

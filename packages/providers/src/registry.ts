@@ -12,7 +12,7 @@
  * wasted spend into a build error.
  */
 
-import { RECIPE_STEPS } from "@kertel/core/research";
+import { RECIPE_STEPS } from "@telt/core/research";
 
 import { binancePriceAdapter } from "./binance.js";
 import { coingeckoPriceAdapter } from "./coingecko.js";
@@ -37,7 +37,7 @@ export function adapterFor(stepId: string): ProviderAdapter | undefined {
  * Every recipe step has an adapter, and every adapter matches its step.
  *
  * Called once at startup and asserted in the suite. It throws rather than
- * refusing because a mismatch here is a defect in Kertel, not a condition a
+ * refusing because a mismatch here is a defect in Telt, not a condition a
  * user can do anything about.
  */
 export function assertRegistryCoversRecipes(): void {

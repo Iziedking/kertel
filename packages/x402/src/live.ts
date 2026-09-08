@@ -6,14 +6,14 @@
  * `node_modules/@x402/evm/dist/cjs/exact/client/index.d.ts` on 2026-09-07.
  *
  * The unscoped `x402` package on npm is version 1 of the protocol and cannot
- * talk to any provider Kertel uses: it pins `x402Versions = [1]`, expects
+ * talk to any provider Telt uses: it pins `x402Versions = [1]`, expects
  * `maxAmountRequired` where these providers send `amount`, expects a `"base"`
  * name where they send `eip155:8453`, and reads the challenge from the body
  * only. See docs/feedback.md.
  *
  * What this module does, and does not do:
  *
- * - It signs. It is the only module in Kertel that can.
+ * - It signs. It is the only module in Telt that can.
  * - It does not decide whether to spend. The caller must have run the policy
  *   engine and hand over an `ApprovedQuote`, and the live challenge is checked
  *   against that approval again here before anything is signed.
@@ -26,9 +26,9 @@ import { registerExactEvmScheme } from "@x402/evm/exact/client";
 import { privateKeyToAccount } from "viem/accounts";
 import type { PrivateKeyAccount } from "viem";
 
-import * as fp from "@kertel/core/money";
-import type { Refusal, Result } from "@kertel/core/domain";
-import { ok, refuse } from "@kertel/core/domain";
+import * as fp from "@telt/core/money";
+import type { Refusal, Result } from "@telt/core/domain";
+import { ok, refuse } from "@telt/core/domain";
 
 import { PAYMENT_RESPONSE_HEADER } from "./constants.js";
 import {
@@ -131,7 +131,7 @@ export function createLiveX402Client(config: LiveClientConfig): X402Client {
   }
 
   /**
-   * Resolve a request to a live challenge and the one option Kertel will pay.
+   * Resolve a request to a live challenge and the one option Telt will pay.
    *
    * Shared by `quote` and `pay` so the two cannot drift: the option that gets
    * signed is chosen by exactly the code that quoted it.
@@ -250,7 +250,7 @@ export function createLiveX402Client(config: LiveClientConfig): X402Client {
       if (account === null) {
         return refuse(
           "X402_WALLET_NOT_CONFIGURED",
-          "No research wallet is configured, so Kertel cannot buy paid evidence.",
+          "No research wallet is configured, so Telt cannot buy paid evidence.",
         );
       }
 
@@ -260,7 +260,7 @@ export function createLiveX402Client(config: LiveClientConfig): X402Client {
       if (resolved.value.kind === "free") {
         return refuse(
           "X402_NO_ACCEPTABLE_OPTION",
-          `${request.providerId} stopped charging for this endpoint. Kertel did not pay; ask again to read it for free.`,
+          `${request.providerId} stopped charging for this endpoint. Telt did not pay; ask again to read it for free.`,
           { provider: request.providerId },
         );
       }
@@ -280,7 +280,7 @@ export function createLiveX402Client(config: LiveClientConfig): X402Client {
       if (quote.payTo.toLowerCase() !== approved.quote.payTo.toLowerCase()) {
         return refuse(
           "X402_RECIPIENT_MISMATCH",
-          "The recipient changed between the quote and the payment, so Kertel signed nothing.",
+          "The recipient changed between the quote and the payment, so Telt signed nothing.",
           { approved: approved.quote.payTo, offered: quote.payTo },
         );
       }
@@ -299,7 +299,7 @@ export function createLiveX402Client(config: LiveClientConfig): X402Client {
       } catch (cause) {
         return refuse(
           "X402_PAYMENT_REJECTED",
-          `Kertel could not sign a payment for ${request.providerId}.`,
+          `Telt could not sign a payment for ${request.providerId}.`,
           { provider: request.providerId, reason: cause instanceof Error ? cause.message : "unknown" },
         );
       }
@@ -311,7 +311,7 @@ export function createLiveX402Client(config: LiveClientConfig): X402Client {
         // a clean failure.
         return refuse(
           "X402_PAYMENT_UNKNOWN",
-          `Kertel signed a payment to ${request.providerId} and did not get an answer. It will not retry until that is resolved.`,
+          `Telt signed a payment to ${request.providerId} and did not get an answer. It will not retry until that is resolved.`,
           { provider: request.providerId, amount: fp.format(quote.amount) },
         );
       }

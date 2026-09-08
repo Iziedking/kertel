@@ -1,5 +1,5 @@
 /**
- * How Kertel manages a position once it holds one.
+ * How Telt manages a position once it holds one.
  *
  * This is the difference between a trigger and a trader. "Sell at fifty percent"
  * is one line of arithmetic; a person who trades for a living does four things

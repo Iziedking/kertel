@@ -1,7 +1,7 @@
 /**
  * Typed results and first-class refusals.
  *
- * A refusal is not an error. It is a correct, expected outcome that Kertel is
+ * A refusal is not an error. It is a correct, expected outcome that Telt is
  * proud of: "the evidence disagreed", "that is above your cap", "the token
  * belongs to a different proposal". Errors get thrown and logged; refusals get
  * returned, stored, and shown to the user with a reason they can act on.
@@ -33,7 +33,7 @@ export function isErr<T, E>(result: Result<T, E>): result is Err<E> {
 /**
  * Stable refusal codes.
  *
- * These are part of Kertel's public contract. They appear in receipts, in the
+ * These are part of Telt's public contract. They appear in receipts, in the
  * SQLite audit trail, and in the proof output, so a reviewer can grep for the
  * exact refusal a test claims to produce. Renaming one is a breaking change.
  *
@@ -67,7 +67,7 @@ export const REFUSAL_CODES = [
   "X402_PAYMENT_REJECTED",
   "X402_PAYMENT_UNKNOWN",
   // Raised for every paid call *after* an unknown one in the same run. An
-  // unresolved payment means Kertel does not know how much it has spent, and a
+  // unresolved payment means Telt does not know how much it has spent, and a
   // budget it cannot count is not a budget.
   "X402_PAYMENT_UNRESOLVED",
 
@@ -148,8 +148,8 @@ export function isRefusal(value: unknown): value is Refusal {
  * Thrown only for a genuine defect: a broken invariant, an impossible state, a
  * bug. Never for a refusal, and never for an expected external failure.
  */
-export class KertelDefect extends Error {
-  override readonly name = "KertelDefect";
+export class TeltDefect extends Error {
+  override readonly name = "TeltDefect";
 }
 
 /**
@@ -158,5 +158,5 @@ export class KertelDefect extends Error {
  * default that guesses.
  */
 export function assertNever(value: never, what: string): never {
-  throw new KertelDefect(`unhandled ${what}: ${JSON.stringify(value)}`);
+  throw new TeltDefect(`unhandled ${what}: ${JSON.stringify(value)}`);
 }

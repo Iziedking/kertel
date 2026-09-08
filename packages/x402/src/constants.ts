@@ -1,5 +1,5 @@
 /**
- * What Kertel is willing to pay with, and who it is willing to pay.
+ * What Telt is willing to pay with, and who it is willing to pay.
  *
  * Every value here was read from a live 402 challenge on 2026-09-07 and saved
  * verbatim under `fixtures/x402/live-quotes/`. Nothing came from a
@@ -12,18 +12,18 @@
  * that is a hard stop and a human decision, never an automatic update.
  */
 
-/** CAIP-2 identifiers for the chains Kertel can pay on. */
+/** CAIP-2 identifiers for the chains Telt can pay on. */
 export const BSC_NETWORK = "eip155:56";
 export const BASE_NETWORK = "eip155:8453";
 
 /**
- * The only transfer method Kertel signs.
+ * The only transfer method Telt signs.
  *
  * `eip3009` is a signed authorisation to move exactly the quoted amount,
  * exactly once, and it costs the payer no gas because the facilitator submits
  * it. `permit2-exact` first requires granting a standing allowance to a spender
  * contract, which is a much larger authority than one payment, so it is
- * refused. Most providers offer the same asset under both. Kertel always takes
+ * refused. Most providers offer the same asset under both. Telt always takes
  * the narrower one, and where only permit2 is on offer it declines the asset.
  */
 export const ACCEPTED_TRANSFER_METHOD = "eip3009";
@@ -53,7 +53,7 @@ export type PaymentRail = {
  *
  * BSC first, deliberately. `U` and `USD1` on BNB Smart Chain settle through
  * B402, Binance's own x402 facilitator, which is the rail this product is being
- * built for. Where a provider offers it, Kertel pays over Binance's
+ * built for. Where a provider offers it, Telt pays over Binance's
  * infrastructure rather than someone else's.
  *
  * Base USDC is the fallback and is not a lesser option: CoinGecko and The Graph
@@ -63,7 +63,7 @@ export type PaymentRail = {
  * is one wallet holding two balances rather than two wallets.
  *
  * Only `U` and `USD1` support EIP-3009 on BSC. BSC USDC and USDT are
- * permit2-only there and so are not rails Kertel can use, whatever their
+ * permit2-only there and so are not rails Telt can use, whatever their
  * price.
  */
 export const PAYMENT_RAILS: readonly PaymentRail[] = Object.freeze([
@@ -118,7 +118,7 @@ export type MerchantPin = {
  * Pinned recipients.
  *
  * This is the control that makes a tampered or hijacked 402 useless: a
- * challenge asking Kertel to pay a different address is refused, whatever else
+ * challenge asking Telt to pay a different address is refused, whatever else
  * it says. Each merchant uses one address across every chain it offers, so a
  * single pin covers both rails.
  *

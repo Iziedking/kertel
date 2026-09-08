@@ -171,7 +171,7 @@ describe("the refusal receipt", () => {
     const body = renderRefusalReceipt({
       refusal: refuse(
         "EVIDENCE_CONFLICT_UNRESOLVED",
-        "The price sources disagree by 300 bps and Kertel could not settle it.",
+        "The price sources disagree by 300 bps and Telt could not settle it.",
       ).error,
       symbol: ETHUSDT,
       mode: "live",
@@ -195,7 +195,7 @@ describe("the refusal receipt", () => {
 
   it("shows a zero spend, because refusing without spending is the product working", () => {
     const body = renderRefusalReceipt({
-      refusal: refuse("PROVIDER_UNAVAILABLE", "Kertel could not read a current price.").error,
+      refusal: refuse("PROVIDER_UNAVAILABLE", "Telt could not read a current price.").error,
       symbol: ETHUSDT,
       mode: "live",
       spent: fp.parse("0.00"),

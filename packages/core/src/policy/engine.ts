@@ -47,7 +47,7 @@ const PASSED: Passed = Object.freeze({ passed: true });
  * The first gate every message meets, before the model, before any provider,
  * before a single paid call.
  *
- * OpenClaw's own channel allowlist runs before this. Kertel checks again anyway.
+ * OpenClaw's own channel allowlist runs before this. Telt checks again anyway.
  * A channel allowlist is routing configuration that an operator can widen by
  * accident; this is the check that decides whether money can move.
  */
@@ -59,19 +59,19 @@ export function evaluateSender(input: {
   if (input.origin === "group") {
     return refuse(
       "GROUP_MESSAGE_REFUSED",
-      "Kertel only takes instructions in a direct chat, never in a group.",
+      "Telt only takes instructions in a direct chat, never in a group.",
     );
   }
   if (input.origin === "unknown") {
     return refuse(
       "GROUP_MESSAGE_REFUSED",
-      "Kertel could not tell whether this message came from a direct chat, so it refused it.",
+      "Telt could not tell whether this message came from a direct chat, so it refused it.",
     );
   }
   if (input.ownerIdHash === null) {
     return refuse(
       "SENDER_NOT_ALLOWED",
-      "No owner is configured, so Kertel has nobody to take instructions from.",
+      "No owner is configured, so Telt has nobody to take instructions from.",
     );
   }
   if (input.senderIdHash !== input.ownerIdHash) {
@@ -104,14 +104,14 @@ export function evaluateSafety(input: {
   if (input.safety.cooldownUntil !== null && input.now < input.safety.cooldownUntil) {
     return refuse(
       "COOLDOWN_ACTIVE",
-      "Kertel is in a cooldown after an unresolved operation and will not start a new one yet.",
+      "Telt is in a cooldown after an unresolved operation and will not start a new one yet.",
       { secondsRemaining: Math.ceil(secondsBetween(input.now, input.safety.cooldownUntil)) },
     );
   }
   if (input.forExecution && input.safety.unreconciledOperations.length > 0) {
     return refuse(
       "PENDING_OPERATION_UNRECONCILED",
-      "An earlier order has not been reconciled yet. Kertel will not send another until it knows what happened to that one.",
+      "An earlier order has not been reconciled yet. Telt will not send another until it knows what happened to that one.",
       { pending: input.safety.unreconciledOperations.length },
     );
   }
@@ -181,7 +181,7 @@ export function evaluatePaidCall(input: {
   if (!input.walletConfigured) {
     return refuse(
       "X402_WALLET_NOT_CONFIGURED",
-      "No research wallet is configured, so Kertel cannot buy paid evidence.",
+      "No research wallet is configured, so Telt cannot buy paid evidence.",
     );
   }
   if (fp.isNegative(input.quotedUsdc)) {
@@ -264,7 +264,7 @@ export function evaluateEvidence(input: {
   if (validProviders.size < input.policy.trading.minValidSources) {
     return refuse(
       "INSUFFICIENT_EVIDENCE",
-      `Only ${String(validProviders.size)} independent source(s) returned usable data, and Kertel needs ${String(input.policy.trading.minValidSources)} before it will propose a trade.`,
+      `Only ${String(validProviders.size)} independent source(s) returned usable data, and Telt needs ${String(input.policy.trading.minValidSources)} before it will propose a trade.`,
       {
         valid: assessment.validSources,
         stale: assessment.staleSources,
@@ -332,7 +332,7 @@ export function evaluateProposal(input: {
   if (marketAge > policy.trading.marketDataMaxAge || marketAge < 0) {
     return refuse(
       "MARKET_DATA_STALE",
-      "The price Kertel would size this order from is too old to trust. Ask again.",
+      "The price Telt would size this order from is too old to trust. Ask again.",
       { ageSeconds: Math.round(marketAge), maxAgeSeconds: policy.trading.marketDataMaxAge },
     );
   }
@@ -392,7 +392,7 @@ export function evaluateProposal(input: {
     );
   }
   // The venue checks the minimum against its own rolling average price, not
-  // against the last trade Kertel sized from. In a fast market those differ,
+  // against the last trade Telt sized from. In a fast market those differ,
   // and an order that clears the minimum on the last price can still be
   // rejected on the average. So it is checked against whichever of the two is
   // less favourable: clearing that clears the exchange either way.
@@ -504,7 +504,7 @@ export function evaluateConfirmation(input: {
   readonly now: Instant;
 }): Result<Passed, Refusal> {
   if (input.token === null) {
-    return refuse("TOKEN_NOT_FOUND", "That confirmation code does not match anything Kertel issued.");
+    return refuse("TOKEN_NOT_FOUND", "That confirmation code does not match anything Telt issued.");
   }
   const token = input.token;
 
@@ -592,7 +592,7 @@ export function evaluateExecution(input: {
     // what is known about the first attempt instead.
     return refuse(
       "DUPLICATE_IDEMPOTENCY_KEY",
-      "This exact order was already submitted. Kertel will report on that one rather than send it twice.",
+      "This exact order was already submitted. Telt will report on that one rather than send it twice.",
       { status: input.existingOperation.status },
     );
   }

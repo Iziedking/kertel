@@ -1,5 +1,5 @@
 /**
- * Probe every x402 provider Kertel can buy from, without paying any of them.
+ * Probe every x402 provider Telt can buy from, without paying any of them.
  *
  * Reading a 402 challenge is free and unauthenticated. This script does exactly
  * that: it asks each provider what a call would cost, checks the answer against
@@ -18,18 +18,18 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import * as fp from "@kertel/core/money";
-import { MERCHANT_PINS, createLiveX402Client } from "@kertel/x402";
-import type { PaidRequest } from "@kertel/x402";
+import * as fp from "@telt/core/money";
+import { MERCHANT_PINS, createLiveX402Client } from "@telt/x402";
+import type { PaidRequest } from "@telt/x402";
 
 const sha256 = (input: string): string => createHash("sha256").update(input, "utf8").digest("hex");
 
 /**
- * Every request Kertel can make, built from a template.
+ * Every request Telt can make, built from a template.
  *
  * This list is the whole of what the product can buy. There is no path that
  * takes a URL from a model or from a WhatsApp message, which is why a compromised
- * prompt cannot make Kertel pay an arbitrary endpoint.
+ * prompt cannot make Telt pay an arbitrary endpoint.
  */
 const PROBES: readonly PaidRequest[] = [
   {
@@ -72,7 +72,7 @@ async function main(): Promise<void> {
   // script must never be able to spend anything.
   const client = createLiveX402Client({ hash: sha256 });
 
-  console.log("Kertel provider probe");
+  console.log("Telt provider probe");
   console.log(`  wallet configured: ${String(client.walletConfigured)} (quotes are free either way)`);
   console.log(`  probed at: ${new Date().toISOString()}`);
   console.log("");
@@ -131,7 +131,7 @@ async function main(): Promise<void> {
 
   console.log("What this proves:");
   console.log("  - each provider is reachable and still speaks x402 version 2;");
-  console.log("  - each one still offers a rail Kertel will sign for, with a");
+  console.log("  - each one still offers a rail Telt will sign for, with a");
   console.log("    single-payment authorisation rather than a standing allowance;");
   console.log("  - each recipient still matches the address pinned in the code.");
   console.log("");
@@ -142,7 +142,7 @@ async function main(): Promise<void> {
 
   if (failures > 0) {
     console.log("");
-    console.log(`${String(failures)} provider(s) refused. Kertel treats those as unavailable.`);
+    console.log(`${String(failures)} provider(s) refused. Telt treats those as unavailable.`);
   }
   if (drift > 0) {
     console.log("");

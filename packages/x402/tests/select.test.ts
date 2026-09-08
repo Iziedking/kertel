@@ -3,8 +3,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import type { PaymentRequired, PaymentRequirements } from "@x402/core/types";
-import * as fp from "@kertel/core/money";
-import type { Refusal, Result } from "@kertel/core/domain";
+import * as fp from "@telt/core/money";
+import type { Refusal, Result } from "@telt/core/domain";
 
 import {
   BASE_NETWORK,
@@ -276,7 +276,7 @@ describe("refusing a challenge that should not be paid", () => {
 
   it("refuses when every remaining option is permit2, on any chain", () => {
     // BSC USDC and USDT are permit2-only, so a challenge offering just those is
-    // priced in assets Kertel cannot sign a single-payment authorisation for.
+    // priced in assets Telt cannot sign a single-payment authorisation for.
     const pin = expectOk(pinFor("coinmarketcap"));
     const challenge = CHALLENGES.coinmarketcap();
     const permit2Only = withAccepts(
@@ -421,7 +421,7 @@ describe("building the quote a receipt is written from", () => {
     expect(quote.facilitator).toBe("Binance B402");
     expect(quote.network).toBe(BSC_NETWORK);
     expect(quote.challengeSource).toBe("body");
-    // Nansen offers eight ways to pay. Three are rails Kertel will sign for
+    // Nansen offers eight ways to pay. Three are rails Telt will sign for
     // (U and USD1 on BSC, USDC on Base) and it takes the first by preference.
     expect(quote.offeredOptions).toBe(8);
     expect(quote.acceptableOptions).toBe(3);

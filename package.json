@@ -1,5 +1,5 @@
 {
-  "name": "kertel",
+  "name": "telt",
   "version": "0.1.0",
   "private": true,
   "description": "Evidence-driven crypto trading agent operated from WhatsApp. Researches first, proposes second, executes only after exact confirmation, verifies every result.",
@@ -12,7 +12,7 @@
     "packages/core",
     "packages/x402",
     "packages/providers",
-    "apps/kertel-plugin"
+    "apps/telt"
   ],
   "scripts": {
     "typecheck": "tsc --build --force",
@@ -24,7 +24,9 @@
     "probe:adapters": "tsx scripts/probe-adapters.ts",
     "probe:futures": "tsx scripts/probe-futures.ts",
     "probe:spot": "tsx scripts/probe-spot.ts",
-    "probe:watch": "tsx scripts/probe-watch.ts"
+    "probe:watch": "tsx scripts/probe-watch.ts",
+    "probe:scan": "tsx scripts/probe-scan.ts",
+    "probe:proof": "tsx scripts/probe-proof.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.0",

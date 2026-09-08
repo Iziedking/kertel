@@ -170,7 +170,7 @@ export function proposal(overrides: Partial<TradeProposal> = {}): TradeProposal 
     estimatedFee: fp.parse("0.02"),
     maxSlippageBps: 50,
     evidenceDigest: "sha256:evidence",
-    policyVersion: "kertel-policy-1",
+    policyVersion: "telt-policy-1",
     mode: "fixture",
     createdAt: T0,
     expiresAt: at(120),

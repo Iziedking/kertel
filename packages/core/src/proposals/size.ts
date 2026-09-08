@@ -49,7 +49,7 @@ export function sizeFromNotional(input: {
     return refuse("AMOUNT_NOT_UNDERSTOOD", "The amount to spend must be greater than zero.");
   }
   if (!fp.isPositive(input.price)) {
-    return refuse("MARKET_DATA_STALE", "Kertel has no usable price to size this order from.");
+    return refuse("MARKET_DATA_STALE", "Telt has no usable price to size this order from.");
   }
 
   const quantityScale = input.filters.stepSize.scale;
@@ -104,7 +104,7 @@ export function sizeFromQuantity(input: {
     return refuse("AMOUNT_NOT_UNDERSTOOD", "The quantity to sell must be greater than zero.");
   }
   if (!fp.isPositive(input.price)) {
-    return refuse("MARKET_DATA_STALE", "Kertel has no usable price to size this order from.");
+    return refuse("MARKET_DATA_STALE", "Telt has no usable price to size this order from.");
   }
 
   const quantity = fp.floorToStep(input.quantity, input.filters.stepSize);

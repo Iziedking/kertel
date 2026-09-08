@@ -9,11 +9,11 @@
  */
 
 process.loadEnvFile?.(".env");
-process.env["KERTEL_LIVE_EXECUTION"] = "false";
+process.env["TELT_LIVE_EXECUTION"] = "false";
 
-import * as fp from "@kertel/core/money";
-import { loadConfig } from "../apps/kertel-plugin/src/infra/config.js";
-import { createRuntime } from "../apps/kertel-plugin/src/runtime.js";
+import * as fp from "@telt/core/money";
+import { loadConfig } from "../apps/telt/src/infra/config.js";
+import { createRuntime } from "../apps/telt/src/runtime.js";
 
 async function timed<T>(label: string, run: () => Promise<T>): Promise<T> {
   const started = Date.now();

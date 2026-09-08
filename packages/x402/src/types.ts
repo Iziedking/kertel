@@ -8,13 +8,13 @@
  * around it.
  */
 
-import type { FixedPoint } from "@kertel/core/money";
-import type { Refusal, Result } from "@kertel/core/domain";
+import type { FixedPoint } from "@telt/core/money";
+import type { Refusal, Result } from "@telt/core/domain";
 
 import type { RailId } from "./constants.js";
 
 /**
- * How Kertel hashes a raw payload.
+ * How Telt hashes a raw payload.
  *
  * Injected rather than imported so the algorithm is chosen once, by the
  * composition root, and `packages/core` stays free of a crypto dependency.
@@ -55,7 +55,7 @@ export type X402Quote = {
   readonly maxTimeoutSeconds: number;
   /** Where the challenge was found. Recorded because both shapes are live. */
   readonly challengeSource: "header" | "body";
-  /** How many options the provider offered, and how many Kertel would accept. */
+  /** How many options the provider offered, and how many Telt would accept. */
   readonly offeredOptions: number;
   readonly acceptableOptions: number;
 };

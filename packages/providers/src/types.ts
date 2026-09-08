@@ -10,8 +10,8 @@
  * change rather than a new place for money to leak out of.
  */
 
-import type { Refusal, ProviderId, Result } from "@kertel/core/domain";
-import type { PaidRequest } from "@kertel/x402";
+import type { Refusal, ProviderId, Result } from "@telt/core/domain";
+import type { PaidRequest } from "@telt/x402";
 
 import type { InstrumentIds } from "./symbols.js";
 
@@ -58,7 +58,7 @@ export type ProviderAdapter = {
   /**
    * Extracts the facts, or returns null.
    *
-   * Null means "this answer is not something Kertel can use" and becomes an
+   * Null means "this answer is not something Telt can use" and becomes an
    * `invalid` observation. Adapters must not throw: a normaliser that throws
    * mid-run after a payment has settled turns a paid call into a crash.
    */

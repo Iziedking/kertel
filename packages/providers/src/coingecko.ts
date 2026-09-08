@@ -18,9 +18,9 @@
  * outright.
  */
 
-import { ok, refuse } from "@kertel/core/domain";
-import type { Refusal, Result } from "@kertel/core/domain";
-import type { PaidRequest } from "@kertel/x402";
+import { ok, refuse } from "@telt/core/domain";
+import type { Refusal, Result } from "@telt/core/domain";
+import type { PaidRequest } from "@telt/x402";
 
 import type { AdapterContext, Normalized, ProviderAdapter } from "./types.js";
 import { decimalFromJson, positiveDecimalFromJson } from "./decimal.js";
@@ -39,7 +39,7 @@ export const coingeckoPriceAdapter: ProviderAdapter = {
     if (coinId === null) {
       return refuse(
         "PROVIDER_UNAVAILABLE",
-        `No verified CoinGecko id for ${context.instrument.symbol}, so Kertel will not guess one and buy a price for the wrong asset.`,
+        `No verified CoinGecko id for ${context.instrument.symbol}, so Telt will not guess one and buy a price for the wrong asset.`,
         { provider: "coingecko", symbol: context.instrument.symbol },
       );
     }

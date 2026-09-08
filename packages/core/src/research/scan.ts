@@ -1,7 +1,7 @@
 /**
  * Finding something worth looking at, before there is anything to research.
  *
- * Every other capability in Kertel starts with a symbol you already have in
+ * Every other capability in Telt starts with a symbol you already have in
  * mind. This is the one that starts with "what is moving", which is where a
  * trading session actually begins — and it is the difference between an agent
  * you have to feed and one you can ask an open question.
@@ -142,7 +142,7 @@ export function renderScan(result: ScanResult, request: ScanRequest): string {
   lines.push(
     "This is a momentum screen, not a signal. Twenty-four hour change is a fact about the past " +
       "and says nothing about what happens next. Nothing here has been researched: these are " +
-      "candidates to look at, and Kertel has no opinion on any of them yet.",
+      "candidates to look at, and Telt has no opinion on any of them yet.",
   );
   lines.push("Cost: nothing. The venue's 24h ticker is free.");
 

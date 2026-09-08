@@ -25,9 +25,9 @@
  * that instead of reporting an absence as calm.
  */
 
-import { ok, refuse } from "@kertel/core/domain";
-import type { Refusal, Result } from "@kertel/core/domain";
-import type { PaidRequest } from "@kertel/x402";
+import { ok, refuse } from "@telt/core/domain";
+import type { Refusal, Result } from "@telt/core/domain";
+import type { PaidRequest } from "@telt/x402";
 
 import type { AdapterContext, Normalized, ProviderAdapter } from "./types.js";
 import type { InstrumentIds } from "./symbols.js";
@@ -82,7 +82,7 @@ export const nansenNetflowAdapter: ProviderAdapter = {
     if (chain === null || context.instrument.nansenTokenAddresses.length === 0) {
       return refuse(
         "PROVIDER_UNAVAILABLE",
-        `Kertel has no verified chain and contract for ${context.instrument.symbol}, so it cannot tell this token's flows from another with the same ticker.`,
+        `Telt has no verified chain and contract for ${context.instrument.symbol}, so it cannot tell this token's flows from another with the same ticker.`,
         { provider: "nansen", symbol: context.instrument.symbol },
       );
     }
@@ -96,7 +96,7 @@ export const nansenNetflowAdapter: ProviderAdapter = {
         chains: [chain],
         filters: {
           // ETH is native on its own chain, so excluding native tokens would
-          // exclude half of what Kertel is allowed to research.
+          // exclude half of what Telt is allowed to research.
           include_native_tokens: true,
           // Stablecoin flows are a funding signal, not a conviction one, and
           // they crowd out the rows this call is being bought for.

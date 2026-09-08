@@ -1,9 +1,9 @@
 /** Read-only. Runs the holdings sweep against the live account. Buys nothing. */
 process.loadEnvFile?.(".env");
-process.env["KERTEL_LIVE_EXECUTION"] = "false";
+process.env["TELT_LIVE_EXECUTION"] = "false";
 
-import { loadConfig } from "../apps/kertel-plugin/src/infra/config.js";
-import { createRuntime } from "../apps/kertel-plugin/src/runtime.js";
+import { loadConfig } from "../apps/telt/src/infra/config.js";
+import { createRuntime } from "../apps/telt/src/runtime.js";
 
 async function main(): Promise<void> {
   const runtime = createRuntime({ config: loadConfig(process.env) });

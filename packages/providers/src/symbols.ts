@@ -7,18 +7,18 @@
  * the wrong asset, and every one of those calls costs money and then gets
  * priced into an order. So the mapping is written down and checked by hand.
  *
- * **This table does not decide what Kertel can trade.** Binance's own
+ * **This table does not decide what Telt can trade.** Binance's own
  * `exchangeInfo` decides that, and it is authoritative: asking the exchange
  * whether a symbol is real involves no guesswork at all. A symbol missing from
  * this table is still tradeable; it simply cannot be corroborated by a paid
  * source, so research falls back to what Binance itself publishes and the
  * receipt says which sources were unavailable and why.
  *
- * That split matters. Confusing "Kertel has no CoinGecko id for this" with
- * "Kertel cannot trade this" is what limited it to two symbols.
+ * That split matters. Confusing "Telt has no CoinGecko id for this" with
+ * "Telt cannot trade this" is what limited it to two symbols.
  */
 
-import type { Symbol_ } from "@kertel/core/domain";
+import type { Symbol_ } from "@telt/core/domain";
 
 export type InstrumentIds = {
   readonly symbol: Symbol_;

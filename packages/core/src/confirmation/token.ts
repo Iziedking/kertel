@@ -6,12 +6,12 @@
  * one specific order, expires, works once, and is bound to one sender. That is
  * what makes the audit trail mean something after the fact.
  *
- * Kertel stores only the hash. The plaintext exists in the outbound WhatsApp
+ * Telt stores only the hash. The plaintext exists in the outbound WhatsApp
  * message and in the user's chat, nowhere else, so a leaked database cannot be
  * used to confirm anything.
  */
 
-import { KertelDefect } from "../domain/result.js";
+import { TeltDefect } from "../domain/result.js";
 import type { Instant, Seconds } from "../domain/time.js";
 import { addSeconds } from "../domain/time.js";
 import type { ConfirmationToken, ProposalId, SenderIdHash } from "../domain/types.js";
@@ -34,7 +34,7 @@ const CODE_LENGTH = 6;
 const ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ*+";
 
 if (ALPHABET.length !== 32) {
-  throw new KertelDefect(`confirmation alphabet must hold 32 symbols, holds ${String(ALPHABET.length)}`);
+  throw new TeltDefect(`confirmation alphabet must hold 32 symbols, holds ${String(ALPHABET.length)}`);
 }
 
 /**
@@ -49,7 +49,7 @@ export function generateConfirmationCode(random: RandomBytes): string {
   while (symbols.length < CODE_LENGTH) {
     const bytes = random(CODE_LENGTH);
     if (bytes.length !== CODE_LENGTH) {
-      throw new KertelDefect(
+      throw new TeltDefect(
         `random source returned ${String(bytes.length)} bytes, expected ${String(CODE_LENGTH)}`,
       );
     }
@@ -60,7 +60,7 @@ export function generateConfirmationCode(random: RandomBytes): string {
       const index = byte & 0b0001_1111;
       const symbol = ALPHABET[index];
       if (symbol === undefined) {
-        throw new KertelDefect(`alphabet index ${String(index)} is out of range`);
+        throw new TeltDefect(`alphabet index ${String(index)} is out of range`);
       }
       symbols.push(symbol);
     }
@@ -112,9 +112,9 @@ export function hashConfirmationCode(input: {
 }): string {
   const normalized = normalizeConfirmationCode(input.code);
   if (normalized === null) {
-    throw new KertelDefect("cannot hash a code that is not well formed");
+    throw new TeltDefect("cannot hash a code that is not well formed");
   }
-  return input.hash(`kertel.confirmation.v1\n${input.proposalHash}\n${normalized}`);
+  return input.hash(`telt.confirmation.v1\n${input.proposalHash}\n${normalized}`);
 }
 
 export type IssuedConfirmation = {
@@ -133,7 +133,7 @@ export function issueConfirmationToken(input: {
   readonly hash: Hasher;
 }): IssuedConfirmation {
   if (input.ttl <= 0) {
-    throw new KertelDefect("a confirmation token needs a positive time to live");
+    throw new TeltDefect("a confirmation token needs a positive time to live");
   }
   const code = generateConfirmationCode(input.random);
   const tokenHash = hashConfirmationCode({
@@ -169,7 +169,7 @@ export function consumeConfirmationToken(
   now: Instant,
 ): ConfirmationToken {
   if (token.status !== "active" || token.consumedAt !== null) {
-    throw new KertelDefect(
+    throw new TeltDefect(
       `refusing to consume a token in status ${token.status}; the confirmation gate should have caught this`,
     );
   }

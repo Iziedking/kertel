@@ -1,5 +1,5 @@
 /**
- * Turning a provider's JSON number into a decimal string Kertel can price from.
+ * Turning a provider's JSON number into a decimal string Telt can price from.
  *
  * Three of the four providers send prices as JSON numbers, which arrive here as
  * IEEE-754 doubles. `packages/core` refuses to work in floats at all, so every

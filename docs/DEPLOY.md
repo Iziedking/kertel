@@ -1,6 +1,6 @@
-# Running Kertel on a server
+# Running Telt on a server
 
-Kertel on a laptop only manages positions while the laptop is on. A stdio MCP
+Telt on a laptop only manages positions while the laptop is on. A stdio MCP
 server is a child process of the client, so closing Claude Code closes the
 monitor with it. On a server you run the daemon instead, and it keeps acting
 while you sleep.
@@ -9,8 +9,8 @@ Two processes, one database:
 
 | Process | What it is for | Where it runs |
 | --- | --- | --- |
-| `kertel-daemon` | Watches positions, fires exits, settles verdicts | The server, always |
-| `kertel-mcp` | How you talk to Kertel from Claude Code | Your machine, when you want it |
+| `telt-daemon` | Watches positions, fires exits, settles verdicts | The server, always |
+| `telt-mcp` | How you talk to Telt from Claude Code | Your machine, when you want it |
 
 They share the SQLite file through WAL mode. The daemon does the acting; the
 MCP server does the asking.
@@ -22,18 +22,18 @@ baked into the image and never committed.
 
 ```bash
 # --- Mode. Both of these, or nothing is placed. -----------------------------
-KERTEL_MODE=live
-KERTEL_LIVE_EXECUTION=true
+TELT_MODE=live
+TELT_LIVE_EXECUTION=true
 
 # --- Where state lives. Must be the mounted volume. -------------------------
 # Losing this loses every armed plan, every high-water mark, and the record of
 # what has already been sold. The compose file mounts a named volume at /data.
-KERTEL_DATA_DIR=/data
-KERTEL_LOG_LEVEL=info
+TELT_DATA_DIR=/data
+TELT_LOG_LEVEL=info
 
 # --- Owner. --------------------------------------------------------------
-# Kertel refuses every command without one. E.164.
-KERTEL_OWNER_WHATSAPP=+2348067053854
+# Telt refuses every command without one. E.164.
+TELT_OWNER_WHATSAPP=+2348067053854
 
 # --- Execution: Binance Agent OS. ------------------------------------------
 # A bearer token with a thirty-day life and no refresh grant. Orders placed
@@ -46,46 +46,46 @@ KERTEL_OWNER_WHATSAPP=+2348067053854
 #   claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
 #
 # In Claude Code it lands in ~/.claude/.credentials.json under mcpOAuth.
-KERTEL_BINANCE_MCP_TOKEN=
+TELT_BINANCE_MCP_TOKEN=
 
 # --- Execution fallback: a Binance API key. --------------------------------
 # Optional. Used only when the Agent OS token is absent or has lapsed, so a
 # server whose token expired can still manage open positions.
 # Create it with Reading and Spot Trading on and WITHDRAWALS OFF.
-KERTEL_BINANCE_API_KEY=
-KERTEL_BINANCE_API_SECRET=
+TELT_BINANCE_API_KEY=
+TELT_BINANCE_API_SECRET=
 
 # --- Research payments over x402. ------------------------------------------
-# A separate EVM key. Kertel refuses to start if this equals the exchange key:
+# A separate EVM key. Telt refuses to start if this equals the exchange key:
 # the research wallet spends cents, the exchange key moves the trading balance,
 # and one leak must not be both.
 #
 # Fund the same address with a few dollars of USDC on Base, or U on BNB Smart
 # Chain to route through Binance's own B402 rail. Payments are gasless.
-KERTEL_X402_PRIVATE_KEY=
-KERTEL_X402_RAIL=auto
-KERTEL_X402_MAX_PER_CALL_USDC=0.06
-KERTEL_X402_MAX_PER_RUN_USDC=0.10
-KERTEL_X402_MAX_PER_DAY_USDC=2.00
+TELT_X402_PRIVATE_KEY=
+TELT_X402_RAIL=auto
+TELT_X402_MAX_PER_CALL_USDC=0.06
+TELT_X402_MAX_PER_RUN_USDC=0.10
+TELT_X402_MAX_PER_DAY_USDC=2.00
 
 # --- Trading limits. -------------------------------------------------------
-KERTEL_ALLOWED_SYMBOLS=ETHUSDT,BTCUSDT
-KERTEL_MAX_TRADE_NOTIONAL=25
-KERTEL_MAX_DAILY_LOSS=50
-KERTEL_MAX_SLIPPAGE_BPS=50
-KERTEL_PROPOSAL_TTL_SECONDS=120
+TELT_ALLOWED_SYMBOLS=ETHUSDT,BTCUSDT
+TELT_MAX_TRADE_NOTIONAL=25
+TELT_MAX_DAILY_LOSS=50
+TELT_MAX_SLIPPAGE_BPS=50
+TELT_PROPOSAL_TTL_SECONDS=120
 ```
 
-An unset variable disables its own feature and says so in `kertel_status`. A
+An unset variable disables its own feature and says so in `telt_status`. A
 variable that is set but malformed is a startup error naming the variable,
-because an operator who typed `KERTEL_MAX_TRADE_NOTIONAL=fifty` believes a limit
+because an operator who typed `TELT_MAX_TRADE_NOTIONAL=fifty` believes a limit
 is in force that is not.
 
 ## Deploy
 
 ```bash
-git clone https://github.com/Iziedking/kertel.git
-cd kertel
+git clone https://github.com/Iziedking/telt.git
+cd telt
 
 cp .env.example .env
 $EDITOR .env                 # fill in the values above
@@ -97,7 +97,7 @@ docker compose logs -f
 The first lines tell you whether it will actually trade:
 
 ```json
-{"msg":"kertel daemon starting","mode":"live","executionRail":"agent-os","liveExecution":true}
+{"msg":"telt daemon starting","mode":"live","executionRail":"agent-os","liveExecution":true}
 {"msg":"monitor started","intervalMs":30000}
 ```
 
@@ -119,14 +119,14 @@ the first you hear of it is a stop that never fired.
 The daemon has no port and accepts no input. To ask it things, point a local MCP
 server at the same database. The simplest arrangement is to keep the daemon on
 the server and run the MCP server locally against a copy of the state carried
-over with `kertel_snapshot` and `kertel_restore`.
+over with `telt_snapshot` and `telt_restore`.
 
 If you want one database serving both, put the MCP server on the same host and
 reach it over SSH:
 
 ```bash
-claude mcp add kertel-remote -- ssh user@your-vps \
-  "KERTEL_DATA_DIR=/var/lib/kertel node /opt/kertel/apps/kertel-plugin/dist/mcp.js"
+claude mcp add telt-remote -- ssh user@your-vps \
+  "TELT_DATA_DIR=/var/lib/telt node /opt/telt/apps/telt/dist/mcp.js"
 ```
 
 That works because stdio is just a pipe, and SSH is a pipe. Both processes then
@@ -147,21 +147,21 @@ Positions survive: they are in the volume, not the container.
 
 ## Backups
 
-The volume is the whole of Kertel's memory of what it is managing.
+The volume is the whole of Telt's memory of what it is managing.
 
 ```bash
-docker compose exec kertel node -e "process.stdout.write('')"   # ensure it is up
-docker run --rm -v kertel_kertel-state:/data -v "$PWD:/out" \
-  busybox tar czf /out/kertel-state-$(date +%F).tar.gz -C /data .
+docker compose exec telt node -e "process.stdout.write('')"   # ensure it is up
+docker run --rm -v telt_telt-state:/data -v "$PWD:/out" \
+  busybox tar czf /out/telt-state-$(date +%F).tar.gz -C /data .
 ```
 
-Or take a `kertel_snapshot` from the MCP server and store it in your memory
+Or take a `telt_snapshot` from the MCP server and store it in your memory
 service, which is portable across machines rather than tied to this one.
 
 ## What this does not do
 
 The daemon exposes no network service. It cannot be reached from a phone, a
-browser, or another machine, and it holds no port open. Talking to Kertel needs
+browser, or another machine, and it holds no port open. Talking to Telt needs
 the MCP server, which is stdio only.
 
 Remote access over HTTP with its own authentication is not built. Until it is,

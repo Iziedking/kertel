@@ -9,13 +9,13 @@
  *
  * Four rules drive every decision below.
  *
- * 1. **Free first.** The venue Kertel would actually trade on is free to read.
+ * 1. **Free first.** The venue Telt would actually trade on is free to read.
  *    If that fails, nothing else is worth buying, because a trade is already
  *    impossible.
  * 2. **Refuse cheaply.** Any refusal that is already certain is issued before
  *    the next paid call, never after. There is no point spending five cents on
  *    Smart Money flows for a symbol whose price sources cannot agree.
- * 3. **Escalate only on cause.** A second price is bought because Kertel needs
+ * 3. **Escalate only on cause.** A second price is bought because Telt needs
  *    corroboration. A third is bought only if the first two disagree. Flows are
  *    bought only when the question is whether to trade, not merely what the
  *    price is.
@@ -78,10 +78,10 @@ export type PlannerState = {
   /**
    * True when no paid provider has a verified id for this symbol.
    *
-   * There is a difference between "Kertel could not get a second price" and "no
+   * There is a difference between "Telt could not get a second price" and "no
    * second price exists to get". The first is a failure worth refusing over; the
    * second is a permanent property of the symbol, and refusing forever would
-   * mean Kertel can only ever trade the handful of pairs somebody wrote down.
+   * mean Telt can only ever trade the handful of pairs somebody wrote down.
    * The run proceeds on the venue's own price and the receipt says, loudly, that
    * nothing corroborates it.
    */
@@ -152,7 +152,7 @@ export type PriceAgreement =
   | { readonly kind: "conflict"; readonly spreadBps: number };
 
 /**
- * Do the prices Kertel has bought so far tell the same story?
+ * Do the prices Telt has bought so far tell the same story?
  *
  * Measured as the spread between the extremes over the lowest price, so adding
  * a third source that sits between two others does not flatter the result.
@@ -296,7 +296,7 @@ export function decideNextStep(state: PlannerState): PlannerDecision {
       kind: "insufficient",
       refusal: refuse(
         "PROVIDER_UNAVAILABLE",
-        "Kertel could not read a current price from the exchange, so it stopped before buying any paid research.",
+        "Telt could not read a current price from the exchange, so it stopped before buying any paid research.",
         { symbol: state.symbol, spent: fp.format(state.spentThisRun) },
       ).error,
       skipped: skippedFrom(
@@ -345,7 +345,7 @@ export function decideNextStep(state: PlannerState): PlannerDecision {
     }
 
     // Nothing left to try, or nothing affordable. Stop rather than escalate to
-    // the dearer tiers: flows cannot fix a price Kertel could not corroborate.
+    // the dearer tiers: flows cannot fix a price Telt could not corroborate.
     const blocked = TIER_ONE_PRICES.some(
       (id) => available(state, requireStep(id)) && !affordable(state, requireStep(id)),
     );
@@ -355,16 +355,16 @@ export function decideNextStep(state: PlannerState): PlannerDecision {
     const [code, detail] = !blocked
       ? ([
           "INSUFFICIENT_EVIDENCE",
-          "No independent price source was available, so Kertel has only the exchange's own price and will not propose a trade on it.",
+          "No independent price source was available, so Telt has only the exchange's own price and will not propose a trade on it.",
         ] as const)
       : !state.walletConfigured
         ? ([
             "X402_WALLET_NOT_CONFIGURED",
-            "Kertel has no research wallet, so it cannot buy a second price source and will not propose a trade on the exchange's own price alone.",
+            "Telt has no research wallet, so it cannot buy a second price source and will not propose a trade on the exchange's own price alone.",
           ] as const)
         : ([
             "X402_RUN_BUDGET_EXHAUSTED",
-            "The research budget ran out before a second price source could be bought, so Kertel has only the exchange's own price.",
+            "The research budget ran out before a second price source could be bought, so Telt has only the exchange's own price.",
           ] as const);
 
     return {
@@ -398,7 +398,7 @@ export function decideNextStep(state: PlannerState): PlannerDecision {
       kind: "insufficient",
       refusal: refuse(
         "EVIDENCE_CONFLICT_UNRESOLVED",
-        `The price sources disagree by ${String(agreement.spreadBps)} bps and Kertel could not settle it, so it will not propose a trade.`,
+        `The price sources disagree by ${String(agreement.spreadBps)} bps and Telt could not settle it, so it will not propose a trade.`,
         { spreadBps: agreement.spreadBps, toleranceBps: PRICE_AGREEMENT_BPS },
       ).error,
       skipped: skippedFrom(
