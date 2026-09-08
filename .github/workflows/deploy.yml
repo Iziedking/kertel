@@ -74,7 +74,24 @@ jobs:
           script_stop: true
           script: |
             set -euo pipefail
-            cd ${{ secrets.VPS_APP_DIR }}
+
+            # Quoted, and checked before use. Unquoted, an unset secret makes
+            # this `cd` with no argument (silently going home and deploying
+            # into the wrong place) and a path with a space makes it `cd` with
+            # two (which is what failed here). Neither should be discovered
+            # halfway through a production deploy.
+            # `xargs` with no arguments strips surrounding whitespace, which a
+            # secret pasted from a terminal very often carries.
+            APP_DIR="$(printf '%s' "${{ secrets.VPS_APP_DIR }}" | xargs)"
+            if [ -z "$APP_DIR" ]; then
+              echo "VPS_APP_DIR is not set. Add it under Settings > Secrets and variables > Actions." >&2
+              exit 1
+            fi
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "$APP_DIR is not a git checkout. Clone the repository there once before the first deploy." >&2
+              exit 1
+            fi
+            cd "$APP_DIR"
 
             git fetch --all
             git reset --hard origin/main
@@ -109,4 +126,6 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          script: docker image prune -f
+          script: |
+            set -euo pipefail
+            docker image prune -f
