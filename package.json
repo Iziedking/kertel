@@ -26,7 +26,8 @@
     "probe:spot": "tsx scripts/probe-spot.ts",
     "probe:watch": "tsx scripts/probe-watch.ts",
     "probe:scan": "tsx scripts/probe-scan.ts",
-    "probe:proof": "tsx scripts/probe-proof.ts"
+    "probe:proof": "tsx scripts/probe-proof.ts",
+    "serve": "node apps/telt/dist/serve.js"
   },
   "devDependencies": {
     "@types/node": "22.20.0",

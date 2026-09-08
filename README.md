@@ -1,6 +1,41 @@
 # Telt
 
-A trading agent for **Binance Spot and USDⓈ-M futures** that buys its own research, refuses what it cannot justify, and manages positions on its own once you approve a plan.
+**The first trading agent whose reasoning you can verify without trusting it.**
+
+Telt buys its own research with real money over x402, and every conclusion it reaches comes with a signed receipt. The payment is a transaction on a public chain. The evidence is committed to by hash. The conclusion is signed by the same key that paid. Anyone — with no account, no credentials, and nothing installed — can check that chain and see for themselves that the agent did the work before it traded.
+
+That is the part nobody else has. Every AI trading agent is asked the same question and none of them can answer it: *how do I know it did not invent the thesis?* Logs do not answer it. A log is written by the same program that would have lied, kept by the same operator who benefits from the lie, and editable afterwards by either.
+
+```
+TELT-ATTESTATION-1
+symbol=ETHUSDT
+goal=price_check
+at=2026-09-08T02:52:01.134Z
+agent=0xd2f6393c6a916acb98057a5920952084b838cfd1
+provenance=8c07355f4d640a4f7654116add00fa63b89e2597fa41d958906870ee36436442
+spent=0.01
+decision=EVIDENCE_ONLY
+order=none
+payment=coingecko:base-usdc:0x8f6d21822954bc2d9606a6e4a7f9c9464e62647f1c73bfb2059b3a72b486b873:0.01
+sig=0x9941c368ddddfc8621fadb557b384d7913ac715c91c4049f11012c5795f8badf01...
+```
+
+That is a real attestation from a real run. The payment is [on Basescan](https://basescan.org/tx/0x8f6d21822954bc2d9606a6e4a7f9c9464e62647f1c73bfb2059b3a72b486b873). Paste the block into `telt_verify` and it recovers the signer, confirms it matches the address that paid, and hands you the explorer links. Change one character of the verdict and it reports the address that *actually* signed it, and tells you not to act on it.
+
+Four facts, none of which come from Telt:
+
+| Link | Who can check it | What it rules out |
+| --- | --- | --- |
+| x402 payment | anyone, on BNB Chain or Base | Research that never happened |
+| Evidence digest | anyone holding the receipt | Sources swapped after the outcome was known |
+| Signature | anyone, with any wallet tool | A conclusion attributed to the wrong agent |
+| Block timestamp | anyone | A thesis backdated to fit a trade |
+
+It only works because x402 payments and Agent OS orders are both independently auditable. It is what this stack is *for*.
+
+## Everything else it does
+
+A trading agent for **Binance Spot and USDⓈ-M futures** that finds candidates, buys its own research, refuses what it cannot justify, and manages positions on its own once you approve a plan.
 
 Market orders only, and futures runs only on the Agent OS rail. Both are deliberate limits rather than unfinished edges, and `telt_status` will tell you so on any machine you run it.
 
@@ -53,6 +88,8 @@ The token is a plain bearer credential that lasts thirty days, with no refresh g
 Telt falls back to a Binance API key when no Agent OS token is set, because a machine whose token lapsed still has to manage open positions. Both paths implement the same interface and share the same parsers, so refusals read identically either way.
 
 ## What it does that other agents don't
+
+**Its reasoning is verifiable by a stranger.** Covered above, and it is the one that matters. Everything below is what a good agent should do; that one is what no other agent can.
 
 **It pays for its own data and tells you what it didn't buy.**
 
@@ -116,6 +153,36 @@ What to do differently
     inside normal noise for this pair. Consider a wider one, or a trailing stop that
     only arms after a real gain.
 ```
+
+## Use it without installing anything
+
+Telt runs as a public MCP server. Point any client at it:
+
+```bash
+claude mcp add telt --transport http https://mcp.telt.site/mcp
+```
+
+```toml
+# ~/.codex/config.toml
+[mcp_servers.telt]
+url = "https://mcp.telt.site/mcp"
+```
+
+Three tiers, and the boundaries are the design rather than an afterthought:
+
+**Anyone, no credentials.** `telt_verify` and `telt_scan`. Verification has to work for someone who does not trust the thing that produced the proof — requiring them to install it first would defeat the point. Market reads are free because they cost nothing and reveal nothing.
+
+**Your own Agent OS token.** Send it as `X-Telt-Binance-Token` and you get the full agent against your own account. The token is never written to disk. Each caller gets a separate database named by a hash of the token rather than the token, so two users cannot see each other's positions and a disk dump leaks no credentials.
+
+**Nobody gets the operator's wallet.** Paid research spends real money from the key in the server's environment, so an anonymous caller who could spend it would drain it within the hour. Callers get every capability except that one, and are told why.
+
+Run your own:
+
+```bash
+TELT_HTTP_PORT=8787 npm run serve
+```
+
+It speaks plain HTTP on purpose — whatever already terminates TLS for your domain does that job better than a process that also holds trading credentials.
 
 ## How a session goes
 
@@ -200,7 +267,7 @@ Research payments need a separate EVM key funded with a few dollars of USDC on B
 
 ## What works right now
 
-Verified on 2026-09-07 against live endpoints.
+Verified on 2026-09-08 against live endpoints.
 
 | Capability | State |
 | --- | --- |
@@ -217,6 +284,10 @@ Verified on 2026-09-07 against live endpoints.
 | USDⓈ-M futures | Wired and tested. Isolated margin and a leverage ceiling are set before a position can open; the proposal shows the liquidation price before you agree. Agent OS rail only. |
 | Margin, convert | Not used. The Agent OS token carries those scopes; Telt touches neither. |
 | Symbols | Anything Binance lists as TRADING, checked live per proposal. Paid research providers refuse an unmapped symbol by name rather than guessing its id. |
+| Proof of research | Live. Verified end to end against a real 0.01 USDC payment on Base: signed, verified from the text alone, and a copy with the verdict altered correctly reported as forged. |
+| Public MCP over HTTP | Working. Stateless, multi-tenant, tokens never written to disk. Anonymous callers can verify proofs and read markets, nothing else. |
+| Discovery (`telt_scan`) | Live. 3,695 pairs read in one free call, 81 above a five million volume floor. |
+| Verified provider ids | ETHUSDT and BTCUSDT only. Any other symbol trades normally but comes back with venue data alone, and the receipt says so rather than implying corroboration. |
 
 Getting an Agent OS token takes one browser sign-in. Connect the MCP server to any supported client, authorise, and copy the `accessToken` the client stored:
 
@@ -270,8 +341,15 @@ including reaching one database from both.
 ```bash
 npm run probe:providers   # live 402 challenges from all four providers. Free, signs nothing.
 npm run probe:adapters    # both research ladders end to end, live Binance price.
-npm run check             # 433 tests
+npm run probe:scan        # every pair on the venue, ranked. Free.
+npm run probe:proof       # buys $0.01 of research, signs it, verifies it, then forges it
+npm run probe:futures     # live futures read and a priced proposal. Sends no order.
+npm run check             # 497 tests
 ```
+
+`probe:proof` is the one worth running. It spends a real cent, prints the attestation, verifies it as a stranger would, then alters one field and shows the verifier catching it and naming the address that actually signed.
+
+The daemon holds no port open, but `npm run serve` does: that is the public MCP endpoint, and the two are separate processes on purpose.
 
 `fixtures/x402/live-quotes/` holds the raw 402 challenges captured from each provider, and `fixtures/binance/exchange-info-2026-09-07.json` holds the real ETHUSDT and BTCUSDT filters read from the authenticated Binance MCP. Tests run against those, not against invented payloads.
 

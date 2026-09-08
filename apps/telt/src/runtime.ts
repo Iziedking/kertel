@@ -259,6 +259,36 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         }));
 
   const tradingDeps: TradingDeps = {
+    /**
+     * The proof that this order followed from evidence.
+     *
+     * Reuses the provenance of the most recent research on the symbol, so the
+     * order is signed against the evidence that actually justified it rather
+     * than against a fresh digest of nothing. With no such research the
+     * attestation still signs the order — it then proves who traded and when,
+     * and says plainly that no paid evidence stands behind it.
+     */
+    attest:
+      signer === null
+        ? null
+        : async (input) => {
+            const recent = store.attestations.recent(1)[0] ?? null;
+            const signed = await signer.sign({
+              symbol: input.symbol,
+              goal: "trade",
+              at: formatInstant(clock.now()),
+              agent: signer.address,
+              provenance: recent?.provenance ?? "none",
+              payments: [],
+              spent: fp.parse("0.00"),
+              decision: input.side,
+              order: input.orderRef,
+            });
+            if (recent !== null) {
+              store.attestations.attachOrder(recent.provenance, input.orderRef);
+            }
+            return renderAttestationBlock(signed);
+          },
     policy: config.policy,
     mode: config.mode,
     store,

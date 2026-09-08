@@ -65,6 +65,20 @@ export type TradingDeps = {
   readonly now: () => Instant;
   readonly newId: (prefix: string) => string;
   readonly ownerHash: SenderIdHash | null;
+  /**
+   * Signs the proof that this order followed from evidence.
+   *
+   * Null when no research wallet is configured. The fill is then reported with
+   * no proof rather than an unsigned one, because an unsigned attestation reads
+   * exactly like a signed one to anybody skimming it.
+   */
+  readonly attest:
+    | ((input: {
+        readonly symbol: string;
+        readonly side: string;
+        readonly orderRef: string;
+      }) => Promise<string | null>)
+    | null;
 };
 
 export type TradeOutcome = {
@@ -564,6 +578,21 @@ export async function confirm(deps: TradingDeps, code: string): Promise<TradeOut
   lines.push(`Order ref:   ${order.exchangeOrderRef}`);
   lines.push("");
   lines.push(`Telt ref:  ${operationId}`);
+
+  // The last link in the chain. A research attestation proves what Telt knew;
+  // this proves it acted on that, tying the order to the evidence under one
+  // signature from the same key that paid for it.
+  if (deps.attest !== null) {
+    const proof = await deps.attest({
+      symbol,
+      side: proposal.side,
+      orderRef: order.exchangeOrderRef,
+    });
+    if (proof !== null) {
+      lines.push("");
+      lines.push(proof);
+    }
+  }
 
   return { ok: true, refusalCode: null, body: lines.join("\n") };
 }
