@@ -97,7 +97,17 @@ async function main(): Promise<void> {
       killSwitch: runtime.store.safetyState().killSwitchEngaged,
     });
   }, HEARTBEAT_MS);
-  heartbeat.unref();
+  // Deliberately NOT unref'd, unlike every other timer in Telt.
+  //
+  // The monitor's own interval is unref'd so that a pending tick cannot hold
+  // the MCP server open after its client goes away. That is right there, and
+  // fatal here: the daemon has no stdin, no socket and no client — this timer
+  // is the only thing keeping its event loop alive. Unref it and the process
+  // reaches the end of main, exits 0, gets restarted by Docker, and does it
+  // again a few seconds later for ever, logging a healthy startup every time.
+  //
+  // Found by deploying it. Nothing on a laptop reproduces it, because there
+  // the monitor always runs inside the stdio server.
 
   let closing = false;
   const shutdown = (signal: string): void => {
