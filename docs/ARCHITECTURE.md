@@ -14,6 +14,39 @@ Telt combines a reasoning client with deterministic research, proposal and execu
 
 Core receives state and time as input. Exchange credentials and research keys remain in the runtime environment. The public frontend has neither.
 
+## Runtime architecture
+
+```mermaid
+flowchart TB
+  subgraph PUBLIC[Public read-only demo]
+    UI[Web browser] --> HTTP[POST /demo]
+    HTTP --> B[Binance bookTicker and avgPrice]
+    HTTP --> G[CoinGecko keyless simple price]
+    B --> E[Quoted evidence]
+    G --> E
+    E --> M[Claude constrained verdict]
+    M --> V[Schema validation]
+    V --> UI
+  end
+
+  subgraph LOCAL[User-owned Agent OS process]
+    C[ChatGPT or Codex] --> MCP[Telt MCP]
+    MCP --> P[Policy and confirmation boundary]
+    P --> A[Binance Agent OS]
+    A --> S[Spot account]
+    A --> F[USD-M Futures]
+    S --> H[Coverage controller]
+    F --> H
+    H --> O[Durable operation]
+    O --> A
+    A --> R[Reconciliation]
+    R --> J[SQLite journal and Memory Lane]
+    R --> K[Kill switch on uncertainty]
+    MCP --> X[x402 research on explicit request]
+    X --> J
+  end
+```
+
 ## Evidence and decision lineage
 
 A research request selects a goal and symbol. The planner chooses sources and applies research spending limits. The runtime stores a research record with a unique ID, symbol, mode, policy version, completion time, usable evidence IDs, expiry and provenance digest.
@@ -52,4 +85,4 @@ The public browser bundle is generated from core attestation code by scripts/bui
 
 A valid signature authenticates displayed signed fields relative to the claimed address. It does not establish personhood, settlement, provider-origin authenticity, accurate content, order fills or chronology. A payment block time does not independently timestamp an off-chain decision. These checks are displayed separately as NOT VERIFIED.
 
-The public homepage demo reads a current public Binance market snapshot and asks the configured model for a constrained verdict. It has no account, payment, or order capability. `scripts/prove.ts` separately generates the offline verifier fixture with a fixed clock, recorded responses, a public test key and stored `NO_TRADE` decisions.
+The public homepage demo reads a current public Binance market snapshot, fetches a free CoinGecko price and 24-hour change for its four mapped examples, and asks the configured model for a constrained verdict. It returns the provider status and observed timestamps so a visitor can see which reads completed. It has no account, payment, or order capability. `scripts/prove.ts` separately generates the offline verifier fixture with a fixed clock, recorded responses, a public test key and stored `NO_TRADE` decisions.

@@ -1,0 +1,63 @@
+{
+  "schema": "telt-binance-execution-evidence/v1",
+  "observedAt": "2026-09-08T22:39:28.473Z",
+  "account": "Binance Agent OS sub-account (identifier redacted)",
+  "sources": [
+    "Authenticated Binance sub-account Spot order history",
+    "Authenticated Binance sub-account USD-M Futures order history",
+    "Live Telt MCP Futures position read"
+  ],
+  "spotOrder": {
+    "symbol": "SOLUSDT",
+    "displayedTime": "2026-09-08 18:12:33",
+    "type": "MARKET",
+    "side": "BUY",
+    "executedBaseQuantity": "0.115 SOL",
+    "total": "11.9646 USDT",
+    "status": "FILLED"
+  },
+  "protectiveFuturesOrder": {
+    "symbol": "SOLUSDT PERPETUAL",
+    "displayedTime": "2026-09-08 22:16:30",
+    "type": "MARKET",
+    "side": "SELL",
+    "executedNotional": "11.3630 USDT",
+    "status": "FILLED"
+  },
+  "reconciledPosition": {
+    "symbol": "SOLUSDT",
+    "side": "SHORT",
+    "quantity": "0.11 SOL",
+    "entryPrice": "103.30000000000001 USDT",
+    "observedMarkPrice": "103.27000000 USDT",
+    "marginMode": "ISOLATED",
+    "leverage": 2,
+    "observedNotional": "11.35970000 USDT",
+    "observedUnrealizedPnl": "0.00330000 USDT",
+    "liquidationPrice": "154.13766169 USDT"
+  },
+  "protectionStatus": {
+    "state": "PARTIALLY_HEDGED",
+    "spotQuantity": "0.11577000 SOL",
+    "futuresShortQuantity": "0.11 SOL",
+    "coverage": "95.01%",
+    "netExposure": "0.00577000 SOL",
+    "approximateNetExposureValue": "0.5957525 USDT",
+    "futuresPnl": "0.01100000 USDT"
+  },
+  "privacy": {
+    "omitted": [
+      "account email",
+      "account user ID",
+      "API credentials",
+      "Agent OS token",
+      "confirmation codes",
+      "exchange order IDs"
+    ]
+  },
+  "verification": {
+    "meaning": "The authenticated Binance account displayed both filled orders, and Telt independently read the resulting live Futures position through the configured Agent OS session.",
+    "limit": "This exported record is not signed by Binance and cannot independently prove that Telt submitted the orders. Review the public demo video alongside the authenticated exchange history."
+  },
+  "recordDigest": "sha256:7a40bdb21da7f1a9b6ee740c30f8dda5b535ba947471a7531c880b1ed32c852d"
+}

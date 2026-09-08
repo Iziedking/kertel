@@ -20,6 +20,7 @@ docs/internal/
 todo.md
 TODO.md
 demo_guide.md
+docs/TRACK_A_DEMO.md
 docs/OPERATIONS.md
 docs/feedback.md
 notes/
@@ -69,6 +70,14 @@ coverage/
 .artifacts/
 proof-output/
 demo-output/
+video-output/
+*.mp4
+*.mov
+*.webm
+*.wav
+*.mp3
+*.m4a
+*.srt
 *.tsbuildinfo
 
 # --- Dependencies and tooling caches -------------------------------------

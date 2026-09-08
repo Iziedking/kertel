@@ -88,6 +88,21 @@ By default, the hosted MCP endpoint and public website carry no Binance account 
 
 The execution path is pair-driven, not hardcoded to four assets. It accepts an uppercase Binance USDT pair when the configured symbol policy allows it and the same pair trades on Spot and USD-M Futures. A fresh install defaults to `ETHUSDT` and `BTCUSDT`; set `TELT_ALLOWED_SYMBOLS=*` or provide a comma-separated list to enable other pairs. Spot-only pairs and pairs outside policy are refused. The public web demo currently uses BTC, ETH, BNB, and SOL as its second-source examples. That demo mapping is separate from the local trading engine's symbol policy.
 
+## Live execution evidence
+
+During the recorded Agent OS run, the authenticated Binance sub-account showed both sides of a SOL protection setup:
+
+| Exchange record | Result |
+| --- | --- |
+| Spot order | Market buy, 0.115 SOL, 11.9646 USDT, filled |
+| USD-M Futures order | Market sell, 11.3630 USDT notional, filled |
+| Reconciled position | 0.11 SOL short, 2x isolated, 11.3597 USDT observed notional |
+| Protection status | 95.01% quantity coverage, 0.00577 SOL net exposure |
+
+The redacted [execution evidence](proofs/binance-execution-2026-09-08.json) records the exact values read from authenticated Binance Spot and Futures history, plus the resulting position read through Telt's Agent OS session. It omits the account identity, credentials, confirmation codes, and exchange order IDs.
+
+This record supports the live account change shown in the product video. It is not a Binance-signed receipt and cannot independently prove which client submitted the orders. Telt's durable operation journal is the intended client-attribution layer for future runs.
+
 ## Use Telt conversationally
 
 Connect a local MCP client and speak normally:
