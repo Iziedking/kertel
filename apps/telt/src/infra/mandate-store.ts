@@ -28,7 +28,12 @@ export type JournalKind =
   | "exit_fired"
   | "exit_failed"
   | "evidence_taken"
-  | "halted";
+  | "halted"
+  | "hedge_proposed"
+  | "hedge_opened"
+  | "hedge_checked"
+  | "hedge_researched"
+  | "hedge_closed";
 
 export type JournalEntry = {
   readonly at: Instant;
@@ -83,6 +88,13 @@ export type MandateStore = {
     at: Instant;
   }): void;
   adopted(symbol: string): { entryPrice: string; quantity: string; source: string } | null;
+  allAdopted(): readonly {
+    readonly symbol: string;
+    readonly entryPrice: string;
+    readonly quantity: string;
+    readonly source: string;
+  }[];
+  forgetAdopted(symbol: string): void;
 
   learn(lesson: Lesson): void;
   lessonsFor(symbol: string): readonly Lesson[];
@@ -350,6 +362,23 @@ export function mandateStore(db: DatabaseSync): MandateStore {
             quantity: String(row["quantity"]),
             source: String(row["source"]),
           };
+    },
+
+    allAdopted() {
+      const rows = db.prepare("SELECT * FROM adopted ORDER BY at ASC").all() as readonly Record<
+        string,
+        unknown
+      >[];
+      return rows.map((row) => ({
+        symbol: String(row["symbol"]),
+        entryPrice: String(row["entry_price"]),
+        quantity: String(row["quantity"]),
+        source: String(row["source"]),
+      }));
+    },
+
+    forgetAdopted(symbol) {
+      db.prepare("DELETE FROM adopted WHERE symbol = ?").run(symbol);
     },
 
     learn(lesson) {

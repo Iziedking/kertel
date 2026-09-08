@@ -81,7 +81,7 @@ export default function Home() {
             <b>Isolated Futures</b> · one-symbol hedge
           </span>
           <span>
-            <b>One-use code</b> · human approval
+            <b>Memory Lane</b> · every protection event
           </span>
         </div>
       </div>
@@ -137,15 +137,15 @@ export default function Home() {
             </p>
           </article>
           <article className="feature-card sand">
-            <span className="card-index">03 / KEEP CONTROL</span>
+            <span className="card-index">03 / WATCH AND REMEMBER</span>
             <div className="feature-icon" aria-hidden="true">
               <Icon name="arrow" />
             </div>
-            <h3>Confirm, check, or remove it.</h3>
+            <h3>Keep the whole position in view.</h3>
             <p>
-              A one-use code opens the isolated short. Ask how protected you
-              are to see both legs together. Ask Telt to remove protection for
-              a reduce-only close.
+              After your one-use confirmation, Protection Watch checks both
+              legs for free. Ask for paid context only when you need it. Memory
+              Lane records the story through the reduce-only close.
             </p>
           </article>
         </div>
@@ -184,7 +184,7 @@ export default function Home() {
         </h2>
         <p className="lede">
           Connect <code>https://mcp.telt.site/mcp</code>, then say “protect my
-          SOL” or “how protected is my BTC?”
+          SOL” or “investigate my SOL protection and show its Memory Lane.”
         </p>
         <Link href="/connect" className="button primary">
           See the MCP setup <Icon name="arrow" />

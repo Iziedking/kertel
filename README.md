@@ -26,11 +26,14 @@ For the full agent workflow, connect ChatGPT or another MCP client to `https://m
 3. It calculates the short quantity from the requested coverage and checks the Futures lot size, minimum position value, Telt's cap, leverage ceiling, and available USDT margin.
 4. It shows the Spot holding, target short, resulting net exposure, required margin, and available Futures cash. No account setting or order changes at this point.
 5. A human types the one-use code. Telt rechecks the position and price, forces isolated margin, sets the approved leverage, and opens the short.
-6. Ask “how protected is my SOL?” to read both legs as one position. Ask “remove my SOL protection” to close the Futures leg with a reduce-only order.
+6. Ask “check my SOL protection” to read both legs as one position for free. Ask “investigate my SOL protection” when you want Telt to spend research points on outside market context.
+7. Ask for the SOL Memory Lane to see the proposal, opening, checks, investigations, and removal in time order. Ask “remove my SOL protection” to close the Futures leg with a reduce-only order.
 
 This path is generic. It supports any `...USDT` asset that Binance currently lists on both Spot and USD-M Futures. BTC, ETH, BNB, and SOL are examples, not a hardcoded allowlist. A Spot-only token cannot use this hedge path.
 
-Budgeted research remains available when the user wants market context. It is optional for a direct protection request and does not determine whether a matching hedge can be sized.
+Protection Watch starts with Binance account facts and spends nothing. Paid research runs only when the user asks Telt to investigate the protected position. It explains market context, but it never opens, resizes, closes, delays, or vetoes the hedge. Missing provider coverage therefore leaves the protection workflow intact.
+
+Memory Lane turns the audit journal into one readable position story. Telt records each protection proposal, confirmation, account check, paid investigation, and removal locally. An MCP client with Agent Memory can store that lane so it follows the user across sessions without giving Telt the memory credential.
 
 An explicitly requested order may omit research. Its receipt records that choice. A pre-send quote check cannot guarantee the fill price of a market order.
 
@@ -49,7 +52,8 @@ https://mcp.telt.site/mcp
 Try one of these prompts:
 
 - “Protect all my SOL holding at 2x.”
-- “How protected is my BTC right now?”
+- “Check my SOL protection.”
+- “Investigate my SOL protection and show its Memory Lane.”
 - “Remove my BNB protection.”
 - “Check ETH market conditions before I decide what to do.”
 
@@ -102,17 +106,18 @@ npm run build
 npm start -- -p 3100
 ```
 
-## Current limits
+## Supported scope
 
-- Binance spot market orders and Agent OS USDⓈ-M futures are supported. Exchange filters and configured symbol restrictions apply.
-- One-symbol Spot hedges work only when the same USDT pair trades on both Spot and USD-M Futures. Telt refuses Spot-only tokens and existing Futures positions rather than mixing exposures.
-- Hedge coverage is quantity based. Fees, funding, price basis, and later Spot balance changes can create drift. `telt_hedge_status` reports the current two-leg state.
-- A hedge remains open until the user asks Telt to remove it. Automatic timed removal is not active in this version.
-- Account-wide loss and total exposure accounting are unavailable. Direct confirmed spot orders enforce per-order and balance checks. Discretionary live entries remain paused until full accounting exists.
-- Futures proposals do not mutate margin or leverage. Those changes occur after confirmation and fresh position and quote checks. Codes are isolated by runtime and expire after two minutes.
-- Approved long-position exit plans can scale out and trail stops. Protective exits do not wait for paid research. Concurrent sweeps coalesce. Incomplete fills require reconciliation before progress is marked complete.
-- Stops require a running daemon and cannot guarantee a price, breakeven, or profit. Active tenant mandates prevent idle eviction. HTTP credentials are not persisted across restarts, so use a dedicated daemon for continuity.
-- Review derives rule-based notes from recorded outcomes. It does not represent training or demonstrated performance improvement.
+- Protect one Spot holding at a time when its USDT pair trades on both Binance Spot and USD-M Futures.
+- Review the calculated short, isolated leverage, margin, coverage, and net exposure before confirming.
+- Check protection for free, or explicitly buy outside research when a market move needs explanation.
+- Read the full protection lifecycle through Memory Lane and carry it between sessions with Agent Memory.
+- Remove protection with a reduce-only close.
+- Keep the runtime online while Telt is monitoring an active position.
+
+Telt refuses unsupported pairs, conflicting Futures positions, insufficient margin, and orders outside configured limits. A hedge reduces directional exposure; fees, funding, price differences, liquidation risk, and later balance changes can affect the result.
+
+Automatic timed removal and portfolio-wide hedging are planned extensions. The submitted workflow is deliberately one holding, one hedge, and one explicit approval path that can be demonstrated end to end.
 
 ## Track A presentation
 

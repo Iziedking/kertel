@@ -51,7 +51,8 @@ export default function Connect() {
           <p>
             Start by asking: <strong>“What can Telt do?”</strong> With your own
             local account session, try:
-            <strong> “Protect all my SOL at 2x.”</strong>
+            <strong> “Protect all my SOL at 2x.”</strong> After confirmation,
+            ask: <strong>“Investigate my SOL protection and show its Memory Lane.”</strong>
           </p>
           <p className="notice">
             Anonymous MCP access is read-only. Account protection runs through
@@ -88,12 +89,14 @@ node apps/telt/dist/serve.js`}</pre>
             <li>Telt reads the account and checks that the pair trades on both markets.</li>
             <li>Review the Spot holding, target short, margin, leverage, and net exposure.</li>
             <li>Type the one-use code only when those numbers are right.</li>
-            <li>Ask how protected you are, or ask Telt to remove the hedge.</li>
+            <li>Ask Telt to check both legs for free.</li>
+            <li>Ask for paid market context only when you want an investigation.</li>
+            <li>Read the Memory Lane, or ask Telt to remove the hedge.</li>
           </ol>
           <p>
-            Telt keeps reasoning, account access, and execution separate. The
-            model can explain a decision; it cannot silently approve or place
-            an order.
+            Protection remains deterministic even when a paid provider has no
+            coverage. Research explains the market and Memory Lane preserves
+            the account story. Neither can silently approve or place an order.
           </p>
         </section>
       </div>

@@ -159,6 +159,13 @@ export function buildServer(runtime: Runtime): McpServer {
         "  A leveraged position with no exit plan is the single most important thing telt_watch can",
         "  tell you about, because it is the only kind the exchange can close for you. Never leave one",
         "  unmentioned, and offer telt_plan_exit when you find it.",
+        "- Protection Watch keeps the hedge as the main product. 'Check my X protection' calls",
+        "  telt_protection_watch with investigate=false and reads account facts for free. 'Investigate",
+        "  my X protection' calls it with investigate=true and buys a full thesis only because the",
+        "  user asked. Paid evidence explains the market; it never opens, resizes, closes, delays, or",
+        "  vetoes protection.",
+        "- 'Show my protection story' or 'show the X Memory Lane' calls telt_memory_lane. After a",
+        "  meaningful protection event, store that result with Agent Memory when it is available.",
         "",
         "When Telt refuses, the refusal is the answer. Report it and its reason; do not work around it,",
         "retry it with different numbers, or reach for another tool to do the same thing.",
@@ -882,6 +889,54 @@ export function buildServer(runtime: Runtime): McpServer {
         const result = await runtime.describeHedge(symbol);
         return text(result.body, !result.ok);
       }),
+  );
+
+  server.registerTool(
+    "telt_protection_watch",
+    {
+      title: "Check protected position",
+      description:
+        "Check the live Spot holding and matching USD-M Futures hedge as one position. " +
+        "The account check is free. Set investigate=true only when the user explicitly asks Telt " +
+        "to investigate or explain the market context, because that buys the full paid research " +
+        "recipe. Research is attached as evidence and never opens, resizes, closes, delays, or " +
+        "vetoes the hedge. Every check becomes part of the position's Memory Lane.",
+      inputSchema: {
+        symbol: z.string().describe("USDT pair to check, for example SOLUSDT."),
+        investigate: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Buy paid market context for this check. Leave false unless the user asked to investigate.",
+          ),
+      },
+    },
+    async ({ symbol, investigate }) =>
+      guard(async () => {
+        const result = await runtime.checkProtection({ symbol, investigate });
+        return text(result.body, !result.ok);
+      }),
+  );
+
+  server.registerTool(
+    "telt_memory_lane",
+    {
+      title: "Protection Memory Lane",
+      description:
+        "Tell the lifecycle of a protected position in time order: proposal, opening, free checks, " +
+        "paid investigations, and removal. Reads Telt's durable local journal and spends nothing. " +
+        "Use after a meaningful event, then store the result with Agent Memory when available so " +
+        "the story can move between sessions and devices.",
+      inputSchema: {
+        symbol: z
+          .string()
+          .optional()
+          .describe("Optional USDT pair. Omit for every recorded protection."),
+        limit: z.number().int().positive().max(100).default(20),
+      },
+    },
+    async ({ symbol, limit }) =>
+      guard(() => text(runtime.memoryLane(symbol, limit))),
   );
 
   server.registerTool(

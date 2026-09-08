@@ -62,6 +62,7 @@ import {
 } from "./futures-trading.js";
 import type { FuturesDeps, FuturesOutcome } from "./futures-trading.js";
 import { describeHedge, proposeHedge } from "./hedge.js";
+import { checkProtection, memoryLane } from "./protection.js";
 import { loadFixtureExchanges } from "./infra/fixtures.js";
 import type { BinanceClient } from "./infra/binance.js";
 import { cancel, confirm, propose, reconcile } from "./trading.js";
@@ -134,6 +135,11 @@ export type Runtime = {
     readonly leverage: number;
   }): Promise<FuturesOutcome>;
   describeHedge(symbol: string): Promise<FuturesOutcome>;
+  checkProtection(input: {
+    readonly symbol: string;
+    readonly investigate: boolean;
+  }): Promise<FuturesOutcome>;
+  memoryLane(symbol: string | undefined, limit: number): string;
   research(input: ResearchRequest): Promise<ResearchResult>;
   decide(input: DecisionInput): ReturnType<typeof recordDecision>;
   propose(input: {
@@ -555,6 +561,11 @@ export function createRuntime(options: RuntimeOptions): Runtime {
           newId: tradingDeps.newId,
         };
 
+  const pendingHedges = new Map<
+    string,
+    { readonly symbol: string; readonly coverageBps: number; readonly leverage: number }
+  >();
+
   const noFutures: FuturesOutcome = {
     ok: false,
     refusalCode: "EXECUTION_ADAPTER_UNAVAILABLE",
@@ -839,34 +850,122 @@ ${renderAttestationBlock(signed)}`;
     executionRail,
     proposeFutures: async (input) =>
       futuresDeps === null ? noFutures : proposeFutures(futuresDeps, input),
-    confirmFutures: async (code) =>
-      futuresDeps === null ? noFutures : confirmFutures(futuresDeps, code),
-    closeFutures: async (symbol, fractionBps) =>
-      futuresDeps === null
-        ? noFutures
-        : closeFutures(futuresDeps, { symbol, fractionBps }),
+    confirmFutures: async (code) => {
+      if (futuresDeps === null) return noFutures;
+      const key = /KTL-[A-Z0-9]+/i.exec(code)?.[0].toUpperCase() ?? null;
+      const hedge = key === null ? undefined : pendingHedges.get(key);
+      const result = await confirmFutures(futuresDeps, code);
+      if (key !== null) pendingHedges.delete(key);
+      if (!result.ok || hedge === undefined) return result;
+
+      const position = await futuresDeps.futures.position(
+        hedge.symbol as Symbol_,
+      );
+      if (position.ok && !fp.isZero(position.value.positionAmt)) {
+        store.mandates.adopt({
+          symbol: hedge.symbol,
+          entryPrice: fp.format(position.value.entryPrice),
+          quantity: fp.format(fp.abs(position.value.positionAmt)),
+          source: "telt-hedge",
+          at: clock.now(),
+        });
+      }
+      store.mandates.journal({
+        at: clock.now(),
+        kind: "hedge_opened",
+        symbol: hedge.symbol,
+        mandateId: null,
+        headline: `Protection opened for ${hedge.symbol}`,
+        detail: `${String(hedge.coverageBps / 100)}% requested coverage at ${String(hedge.leverage)}x isolated. ${result.body.replace(/\s+/g, " ").trim()}`,
+        evidence: null,
+      });
+      return {
+        ...result,
+        body: `${result.body}\n\nProtection Watch is ready. Ask “check my ${hedge.symbol} protection” for a free account check or “investigate my ${hedge.symbol} protection” for paid market context.`,
+      };
+    },
+    closeFutures: async (symbol, fractionBps) => {
+      if (futuresDeps === null) return noFutures;
+      const normalized = symbol.trim().toUpperCase();
+      const tracked = store.mandates.adopted(normalized);
+      const result = await closeFutures(futuresDeps, { symbol, fractionBps });
+      if (
+        result.ok &&
+        fractionBps >= 10_000 &&
+        tracked?.source === "telt-hedge"
+      ) {
+        store.mandates.forgetAdopted(normalized);
+        store.mandates.journal({
+          at: clock.now(),
+          kind: "hedge_closed",
+          symbol: normalized,
+          mandateId: null,
+          headline: `Protection removed from ${normalized}`,
+          detail: result.body.replace(/\s+/g, " ").trim(),
+          evidence: null,
+        });
+      }
+      return result;
+    },
     describeFutures: async (symbols) =>
       futuresDeps === null
         ? noFutures.body
         : describeFutures(futuresDeps, symbols),
-    proposeHedge: async (input) =>
-      futuresDeps === null
-        ? noFutures
-        : proposeHedge(
-            {
-              binance,
-              futures: futuresDeps.futures,
-              maxLeverage: config.maxLeverage,
-              maxNotional: config.maxFuturesNotional,
-              proposeFutures: (request) =>
-                proposeFutures(futuresDeps, request),
-            },
-            input,
-          ),
+    proposeHedge: async (input) => {
+      if (futuresDeps === null) return noFutures;
+      const result = await proposeHedge(
+        {
+          binance,
+          futures: futuresDeps.futures,
+          maxLeverage: config.maxLeverage,
+          maxNotional: config.maxFuturesNotional,
+          proposeFutures: (request) => proposeFutures(futuresDeps, request),
+        },
+        input,
+      );
+      if (result.ok) {
+        const code = /KTL-[A-Z0-9]+/.exec(result.body)?.[0];
+        const symbol = input.symbol.trim().toUpperCase();
+        if (code !== undefined) {
+          pendingHedges.set(code, { ...input, symbol });
+        }
+        store.mandates.journal({
+          at: clock.now(),
+          kind: "hedge_proposed",
+          symbol,
+          mandateId: null,
+          headline: `Protection proposed for ${symbol}`,
+          detail: `${String(input.coverageBps / 100)}% requested coverage at ${String(input.leverage)}x isolated. No order was placed.`,
+          evidence: null,
+        });
+      }
+      return result;
+    },
     describeHedge: async (symbol) =>
       futuresDeps === null
         ? noFutures
         : describeHedge({ binance, futures: futuresDeps.futures }, symbol),
+    checkProtection: async (input) =>
+      checkProtection(
+        {
+          store,
+          now: () => clock.now(),
+          status: (symbol) =>
+            futuresDeps === null
+              ? Promise.resolve(noFutures)
+              : describeHedge(
+                  { binance, futures: futuresDeps.futures },
+                  symbol,
+                ),
+          research: (symbol) => research({ symbol, goal: "trade_thesis" }),
+        },
+        input,
+      ),
+    memoryLane: (symbol, limit) =>
+      memoryLane(store, {
+        ...(symbol === undefined ? {} : { symbol }),
+        limit,
+      }),
     mode: config.mode,
     ownerHash,
     research,
@@ -998,6 +1097,9 @@ function futuresWatchlist(
   }
   for (const mandate of store.mandates.all()) {
     if (mandate.market === "futures") seen.add(mandate.symbol);
+  }
+  for (const adopted of store.mandates.allAdopted()) {
+    if (adopted.source === "telt-hedge") seen.add(adopted.symbol);
   }
   return [...seen].map((name) => name as Symbol_);
 }
