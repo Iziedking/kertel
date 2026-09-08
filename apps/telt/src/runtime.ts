@@ -80,6 +80,7 @@ import { verifyAttestation } from "./verify.js";
 import { hunt, DEFAULT_MIN_VOLUME } from "./hunt.js";
 import type { HuntDeps, HuntOutcome } from "./hunt.js";
 import { createModelClient } from "./infra/model.js";
+import type { ModelClient } from "./infra/model.js";
 import { describeBudget } from "@telt/core/autonomy";
 import { rankMovers, renderScan } from "@telt/core/research";
 import {
@@ -111,6 +112,8 @@ export type Runtime = {
   /** Hash of the configured owner, the form used in every stored record. */
   readonly ownerHash: string | null;
   readonly binance: BinanceClient;
+  /** The single validated model seam used by autonomous and public-demo reasoning. */
+  readonly model: ModelClient;
   /** Which rail orders go out on. Shown in the status report. */
   readonly executionRail: "agent-os" | "api-key" | "none";
   /** Null when futures is unavailable, which is any rail other than Agent OS. */
@@ -307,6 +310,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       : createBinanceClient({
           apiKey: config.binanceApiKey ?? undefined,
           apiSecret: config.binanceApiSecret ?? undefined,
+          marketBaseUrl: config.binanceMarketUrl,
           ...(options.fetchImpl === undefined
             ? {}
             : { fetchImpl: options.fetchImpl }),
@@ -823,6 +827,7 @@ ${renderAttestationBlock(signed)}`;
     log,
     x402,
     binance,
+    model,
     futures,
     executionRail,
     proposeFutures: async (input) =>

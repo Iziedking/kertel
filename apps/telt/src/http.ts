@@ -44,6 +44,8 @@ import { createRuntime } from "./runtime.js";
 import type { Runtime } from "./runtime.js";
 import { createLogger } from "./infra/logger.js";
 import type { Logger } from "./infra/logger.js";
+import { createDemoService } from "./demo.js";
+import type { DemoService } from "./demo.js";
 
 /** The header a caller uses to bring their own Binance Agent OS token. */
 export const TOKEN_HEADER = "x-telt-binance-token";
@@ -70,7 +72,20 @@ export type HttpServerOptions = {
   /** Where per-caller databases live. Must be a mounted volume in a container. */
   readonly dataDir: string;
   readonly log?: Logger;
+  readonly demo?: DemoService;
 };
+
+function positiveInteger(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= 0 ? value : fallback;
+}
+
+function clientKey(request: IncomingMessage): string {
+  const forwarded = request.headers["x-forwarded-for"];
+  const raw = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  return (raw?.split(",")[0]?.trim() || request.socket.remoteAddress || "unknown").slice(0, 80);
+}
 
 /**
  * A caller's identity, derived from their token and never equal to it.
@@ -172,6 +187,15 @@ export function createHttpServer(options: HttpServerOptions): Server {
     return runtime;
   }
 
+  const anonymous = runtimeFor(null);
+  const demo = options.demo ?? createDemoService({
+    binance: anonymous.binance,
+    model: anonymous.model,
+    modelName: anonymous.config.model ?? "claude-sonnet-5",
+    dailyLimit: positiveInteger(process.env["TELT_DEMO_DAILY_CALLS"], 0),
+    perMinuteLimit: positiveInteger(process.env["TELT_DEMO_CALLS_PER_MINUTE"], 4),
+  });
+
   const sweep = setInterval(() => {
     const cutoff = Date.now() - RUNTIME_IDLE_MS;
     for (const [key, tenant] of tenants) {
@@ -217,6 +241,27 @@ export function createHttpServer(options: HttpServerOptions): Server {
         return;
       }
 
+      if (url.pathname === "/demo") {
+        if (request.method !== "POST") {
+          send(response, 405, { error: "Send a JSON question over POST /demo." });
+          return;
+        }
+        let body: unknown;
+        try {
+          body = await readBody(request);
+        } catch (cause) {
+          const message = cause instanceof Error ? cause.message : "bad request";
+          send(response, message.includes("too large") ? 413 : 400, { error: message });
+          return;
+        }
+        const message = typeof body === "object" && body !== null
+          ? (body as Record<string, unknown>)["message"]
+          : undefined;
+        const result = await demo.analyze(message, clientKey(request));
+        send(response, result.ok ? 200 : result.status, result);
+        return;
+      }
+
       if (url.pathname !== "/mcp") {
         send(response, 404, { error: "Not found. The MCP endpoint is /mcp." });
         return;
@@ -245,7 +290,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
 
       let transport: StreamableHTTPServerTransport | null = null;
       try {
-        const runtime = runtimeFor(token);
+        const runtime = token === null ? anonymous : runtimeFor(token);
         // Omitting `sessionIdGenerator` is what selects stateless mode. Each
         // request stands alone, so the server can restart or move hosts
         // without any client noticing.

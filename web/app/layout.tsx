@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fredoka, Hanken_Grotesk, Space_Mono } from "next/font/google";
 import "./globals.css";
 import Nav from "./Nav";
+import Icon from "./Icon";
 
 // Carried over from the Telt brand: Fredoka for display, Hanken Grotesk for
 // body, Space Mono for anything a machine produced. The mono is doing real work
@@ -80,7 +81,7 @@ export default function RootLayout({
           <div className="footer-links">
             <a href="/connect">Connect</a>
             <a href="/verify">Verify</a>
-            <a href="https://github.com/Iziedking/kertel">GitHub ↗</a>
+            <a href="https://github.com/Iziedking/kertel">GitHub <Icon name="arrow" /></a>
           </div>
         </footer>
       </body>

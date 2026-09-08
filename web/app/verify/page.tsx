@@ -3,6 +3,7 @@ import { useState } from "react";
 import { recoverMessageAddress } from "viem";
 import { canonicalize, deserialize, explorerUrl } from "../../lib/attestation";
 import { EXAMPLE } from "../../lib/example";
+import Icon from "../Icon";
 type Result = {
   valid: boolean;
   signer: string;
@@ -100,7 +101,7 @@ export default function Verify() {
               disabled={busy || !text.trim()}
               onClick={() => void run()}
             >
-              {busy ? "Checking…" : "Verify signature ↗"}
+              {busy ? "Checking…" : <>Verify signature <Icon name="arrow" /></>}
             </button>
             <button
               className="button secondary"
@@ -217,7 +218,7 @@ export default function Verify() {
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        Inspect {link.provider} transaction ↗
+                        Inspect {link.provider} transaction <Icon name="arrow" />
                       </a>
                     </p>
                   ))}

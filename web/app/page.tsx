@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Demo from "./Demo";
+import Icon from "./Icon";
 export default function Home() {
   return (
     <main>
@@ -25,7 +26,7 @@ export default function Home() {
           </p>
           <div className="actions">
             <Link href="#demo" className="button primary">
-              See Telt think <span>↗</span>
+              See Telt think <Icon name="arrow" />
             </Link>
             <Link href="/connect" className="button secondary">
               Connect Telt
@@ -61,9 +62,7 @@ export default function Home() {
               A reason.
               <br />A limit. A receipt.
             </strong>
-            <span className="round-arrow" aria-hidden="true">
-              ↗
-            </span>
+            <span className="round-arrow" aria-hidden="true"><Icon name="arrow" /></span>
           </div>
           <div className="art-caption">
             A workflow you can question at every step.
@@ -118,7 +117,7 @@ export default function Home() {
           <article className="feature-card mint">
             <span className="card-index">01 / SPEND WITH INTENT</span>
             <div className="feature-icon" aria-hidden="true">
-              ◎
+              <Icon name="orbit" />
             </div>
             <h3>Buy the next useful fact.</h3>
             <p>
@@ -130,7 +129,7 @@ export default function Home() {
           <article className="feature-card lavender">
             <span className="card-index">02 / MAKE THE REASON EXPLICIT</span>
             <div className="feature-icon" aria-hidden="true">
-              ≋
+              <Icon name="waves" />
             </div>
             <h3>Leave a decision trail.</h3>
             <p>
@@ -141,7 +140,7 @@ export default function Home() {
           <article className="feature-card sand">
             <span className="card-index">03 / KEEP YOUR SAY</span>
             <div className="feature-icon" aria-hidden="true">
-              ↗
+              <Icon name="arrow" />
             </div>
             <h3>Approve the exact order.</h3>
             <p>
@@ -167,12 +166,12 @@ export default function Home() {
               data, timing, and order fills need their own checks.
             </p>
             <Link className="button ink-button" href="/verify">
-              Open the verifier <span>↗</span>
+              Open the verifier <Icon name="arrow" />
             </Link>
           </div>
           <div className="proof-stamp" aria-hidden="true">
             <span>TELT RECEIPT</span>
-            <b>✓</b>
+            <b><Icon name="check" /></b>
             <span>SIGNATURE ≠ TRUTH</span>
           </div>
         </div>
@@ -189,7 +188,7 @@ export default function Home() {
           your own runtime.
         </p>
         <Link href="/connect" className="button primary">
-          Set up Telt <span>↗</span>
+          Set up Telt <Icon name="arrow" />
         </Link>
       </section>
     </main>

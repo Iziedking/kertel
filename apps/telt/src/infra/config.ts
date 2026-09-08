@@ -84,6 +84,8 @@ export type TeltConfig = {
   /** Null means no research wallet, so every paid call refuses early. */
   readonly x402PrivateKey: string | null;
   readonly binanceMcpUrl: string;
+  /** Host used only for unsigned Binance market reads. */
+  readonly binanceMarketUrl: string;
   /**
    * Bearer token for Binance Agent OS. Preferred over the API key when set.
    *
@@ -376,6 +378,7 @@ export function loadConfig(env: Env): TeltConfig {
     railPreference: railPreferenceOf(setting(env, "X402_RAIL")),
     x402PrivateKey: key,
     binanceMcpUrl: setting(env, "BINANCE_MCP_URL") ?? "https://agent.binance.com/mcp/agentic",
+    binanceMarketUrl: setting(env, "BINANCE_MARKET_URL") ?? "https://api.binance.com",
     binanceMcpToken: setting(env, "BINANCE_MCP_TOKEN"),
     binanceApiKey: binanceKey,
     binanceApiSecret: binanceSecret,

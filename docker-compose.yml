@@ -65,6 +65,9 @@ services:
       TELT_MAX_LEVERAGE: "3"
       TELT_MAX_FUTURES_NOTIONAL: "50"
       TELT_ALLOWED_SYMBOLS: "*"
+      # Binance's market-data-only host is available from regions where the
+      # trading host refuses even unsigned price requests.
+      TELT_BINANCE_MARKET_URL: https://data-api.binance.vision
       # Explicitly empty, and explicitly NOT read from .env. A public endpoint
       # holding the operator's exchange token would be one bug away from
       # trading a stranger's idea on the operator's account, and one holding
@@ -74,6 +77,12 @@ services:
       TELT_BINANCE_API_SECRET: ""
       TELT_X402_PRIVATE_KEY: ""
       TELT_LIVE_EXECUTION: "false"
+      # The public showcase can spend only model calls. It receives no Binance
+      # account token, trading key, or x402 wallet.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TELT_MODEL: ${TELT_MODEL:-claude-sonnet-5}
+      TELT_DEMO_DAILY_CALLS: ${TELT_DEMO_DAILY_CALLS:-100}
+      TELT_DEMO_CALLS_PER_MINUTE: ${TELT_DEMO_CALLS_PER_MINUTE:-4}
     volumes:
       - telt-tenants:/data
     expose:

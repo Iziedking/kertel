@@ -1,3 +1,5 @@
+import Icon from "../Icon";
+
 export default function Connect() {
   return (
     <main className="wrap">
@@ -28,11 +30,11 @@ npm run prove
 node apps/telt/dist/mcp.js`}</pre>
           <p>
             The default fixture mode does not place live orders. Paid research
-            also needs explicit wallet configuration; the public demo uses
-            recorded responses.
+            also needs explicit wallet configuration. The public website demo
+            uses live Binance market data and a server-side model with no order access.
           </p>
           <a className="inline-link" href="https://github.com/Iziedking/kertel">
-            Open source and setup instructions ↗
+            Open source and setup instructions <Icon name="arrow" />
           </a>
         </section>
         <section className="panel">

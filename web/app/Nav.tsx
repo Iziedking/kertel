@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Icon from "./Icon";
 
 export default function Nav() {
   const [dark, setDark] = useState(false);
@@ -42,7 +43,7 @@ export default function Nav() {
           onClick={toggle}
           aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
         >
-          {dark ? "☀" : "◐"}
+          <Icon name={dark ? "sun" : "moon"} />
         </button>
       </div>
     </nav>

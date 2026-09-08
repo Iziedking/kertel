@@ -89,6 +89,8 @@ export type BinanceConfig = {
   readonly apiKey?: string | undefined;
   readonly apiSecret?: string | undefined;
   readonly baseUrl?: string;
+  /** Binance's market-data-only host, useful where the trading host is region gated. */
+  readonly marketBaseUrl?: string;
   readonly fetchImpl?: typeof globalThis.fetch;
 };
 
@@ -320,6 +322,7 @@ export function parseAccount(body: unknown): AccountSnapshot {
 
 export function createBinanceClient(config: BinanceConfig): BinanceClient {
   const baseUrl = config.baseUrl ?? DEFAULT_BASE_URL;
+  const marketBaseUrl = config.marketBaseUrl ?? baseUrl;
   const doFetch = config.fetchImpl ?? globalThis.fetch;
   const apiKey = config.apiKey?.trim() ?? "";
   const apiSecret = config.apiSecret?.trim() ?? "";
@@ -351,7 +354,7 @@ export function createBinanceClient(config: BinanceConfig): BinanceClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), input.timeoutMs);
     try {
-      const url = `${baseUrl}${input.path}?${params.toString()}`;
+      const url = `${input.signed ? baseUrl : marketBaseUrl}${input.path}?${params.toString()}`;
       const response = await doFetch(url, {
         method: input.method,
         headers: input.signed ? { "X-MBX-APIKEY": apiKey } : {},

@@ -42,7 +42,7 @@ Use Node.js 22.17, matching the runtime image:
 
 The prove command runs the real fixture research runtime with recorded responses, a public test key, a fixed clock and an in-memory database. It stores explicit NO_TRADE decisions and generates web/lib/demo.json. The conclusion is scripted, not an LLM output. No network call, payment or order is made.
 
-The public fixture and generated browser verifier are included under web/lib so the standalone site can build without private backend state. Regenerate them after related core changes.
+The generated fixture and browser verifier remain under web/lib for reproducible offline proof. The homepage now calls `POST https://mcp.telt.site/demo`: Telt reads a live public Binance market snapshot, sends that bounded evidence through its server-side Anthropic model seam, validates the structured verdict, and returns the result. The browser receives no provider key, account credential, research wallet, or order capability.
 
     cd web
     npm ci --ignore-scripts
@@ -70,6 +70,6 @@ Live execution requires both TELT_MODE=live and TELT_LIVE_EXECUTION=true. Config
 
 ## Track A presentation
 
-Compare the two labelled fixture questions, inspect the NO_TRADE decision, then verify the recorded sample and tamper with its conclusion. For the real agent portion, show your MCP client recording a decision and preparing an order in fixture mode. Identify Binance Agent OS as the execution/account integration.
+Run one homepage question and show the live Binance observation time, Claude verdict, stated evidence gaps, and no-order boundary. Then connect ChatGPT to `https://mcp.telt.site/mcp`, inspect the available tools, and show Telt returning the same guarded workflow through MCP. Use the independent verifier to demonstrate that signed claims can be checked and tampering fails. Identify Binance Agent OS as the account and execution integration; do not place an order for the demo.
 
 [Submission walkthrough](docs/TRACK_A_DEMO.md) · [Implementation notes](docs/IMPLEMENTATION_2026-09-08.md) · [Runbook](docs/RUNBOOK.md)
