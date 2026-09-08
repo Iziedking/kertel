@@ -87,14 +87,38 @@ jobs:
               echo "VPS_APP_DIR is not set. Add it under Settings > Secrets and variables > Actions." >&2
               exit 1
             fi
+            # Self-healing rather than a precondition. A first deploy onto a
+            # fresh machine should work, and so should one where the directory
+            # was moved or removed -- being told "clone it yourself" is a poor
+            # answer from something whose entire job is deploying.
             if [ ! -d "$APP_DIR/.git" ]; then
-              echo "$APP_DIR is not a git checkout. Clone the repository there once before the first deploy." >&2
-              exit 1
+              # Clone only into somewhere that is absent or empty. NEVER delete
+              # to make room: this path comes from a secret, and if it were ever
+              # set to a parent directory a clearing step would take the rest of
+              # the machine with it. A deploy that stops is recoverable; one
+              # that removes the wrong directory is not.
+              if [ -e "$APP_DIR" ] && [ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ]; then
+                echo "The configured path exists, is not a git checkout, and is not empty." >&2
+                echo "Refusing to touch it. Check VPS_APP_DIR." >&2
+                exit 1
+              fi
+              echo "No checkout at the configured path; cloning into it." >&2
+              git clone https://github.com/Iziedking/kertel.git "$APP_DIR"
             fi
             cd "$APP_DIR"
 
             git fetch --all
             git reset --hard origin/main
+
+            # The secrets file is never in the repository, so a fresh clone has
+            # none. Without it the daemon starts with no credentials and says
+            # so; the public endpoint is unaffected because it holds none by
+            # design.
+            if [ ! -f .env ]; then
+              echo "No .env at $APP_DIR — the daemon will start without credentials." >&2
+              cp .env.example .env
+              chmod 600 .env
+            fi
 
             # The daemon holds live positions, so it is replaced rather than
             # torn down: `up -d` recreates only what changed, and the named

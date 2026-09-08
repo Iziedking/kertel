@@ -74,6 +74,25 @@ export type InstrumentIds = {
  * Every accepted id was then queried for a live price, and all thirty-two
  * returned one. A ticker that resolves to exactly one id is a candidate; an id
  * that returns a price for that asset is a verified one.
+ *
+ * Eight of them also carry a Nansen contract, which unlocks Smart Money flows —
+ * the only evidence Telt buys that speaks to conviction rather than price. Those
+ * eight are the ones where CoinGecko's published contract and Binance's own
+ * Ethereum network address for the coin are byte-for-byte the same. Two
+ * independent sources agreeing is the bar, because a flow attributed to the
+ * wrong contract is a number that looks authoritative and describes a different
+ * asset.
+ *
+ * RENDER and INJ are Ethereum ERC-20s and are deliberately absent from that
+ * eight: only CoinGecko names their contract, and one source is a claim.
+ *
+ * The native L1 coins here — SOL, XRP, ADA, DOT, ATOM, NEAR, FIL and the rest —
+ * have no Ethereum contract at all, so Nansen simply does not apply to them.
+ * That is an answer rather than a gap, and the receipt says so by name.
+ *
+ * What Telt must never do is take the wrapped version. Binance lists a
+ * BNB-Chain contract for SOL, XRP, ADA and others; those are Binance-pegged
+ * wrappers, and flows through a wrapper describe the wrapper.
  */
 export const INSTRUMENTS: readonly InstrumentIds[] = Object.freeze([
   {
@@ -178,9 +197,9 @@ export const INSTRUMENTS: readonly InstrumentIds[] = Object.freeze([
     // independent prices, which is what corroboration needs.
     coinmarketcapId: null,
     coinmarketcapSymbol: "LINK",
-    nansenChain: null,
-    nansenTokenAddresses: [],
-    nansenTokenSymbols: [],
+    nansenChain: "ethereum",
+    nansenTokenAddresses: ["0x514910771af9ca656af840dff83e8264ecf986ca"],
+    nansenTokenSymbols: ["LINK"],
   },
   {
     symbol: "DOTUSDT" as Symbol_,
@@ -262,9 +281,9 @@ export const INSTRUMENTS: readonly InstrumentIds[] = Object.freeze([
     // independent prices, which is what corroboration needs.
     coinmarketcapId: null,
     coinmarketcapSymbol: "UNI",
-    nansenChain: null,
-    nansenTokenAddresses: [],
-    nansenTokenSymbols: [],
+    nansenChain: "ethereum",
+    nansenTokenAddresses: ["0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"],
+    nansenTokenSymbols: ["UNI"],
   },
   {
     symbol: "ATOMUSDT" as Symbol_,
@@ -304,9 +323,9 @@ export const INSTRUMENTS: readonly InstrumentIds[] = Object.freeze([
     // independent prices, which is what corroboration needs.
     coinmarketcapId: null,
     coinmarketcapSymbol: "ARB",
-    nansenChain: null,
-    nansenTokenAddresses: [],
-    nansenTokenSymbols: [],
+    nansenChain: "ethereum",
+    nansenTokenAddresses: ["0xb50721bcf8d664c30412cfbc6cf7a15145234ad1"],
+    nansenTokenSymbols: ["ARB"],
   },
   {
     symbol: "OPUSDT" as Symbol_,
@@ -388,9 +407,9 @@ export const INSTRUMENTS: readonly InstrumentIds[] = Object.freeze([
     // independent prices, which is what corroboration needs.
     coinmarketcapId: null,
     coinmarketcapSymbol: "PEPE",
-    nansenChain: null,
-    nansenTokenAddresses: [],
-    nansenTokenSymbols: [],
+    nansenChain: "ethereum",
+    nansenTokenAddresses: ["0x6982508145454ce325ddbe47a25d4ec3d2311933"],
+    nansenTokenSymbols: ["PEPE"],
   },
   {
     symbol: "SHIBUSDT" as Symbol_,
@@ -402,9 +421,9 @@ export const INSTRUMENTS: readonly InstrumentIds[] = Object.freeze([
     // independent prices, which is what corroboration needs.
     coinmarketcapId: null,
     coinmarketcapSymbol: "SHIB",
-    nansenChain: null,
-    nansenTokenAddresses: [],
-    nansenTokenSymbols: [],
+    nansenChain: "ethereum",
+    nansenTokenAddresses: ["0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce"],
+    nansenTokenSymbols: ["SHIB"],
   },
   {
     symbol: "BONKUSDT" as Symbol_,
@@ -486,9 +505,9 @@ export const INSTRUMENTS: readonly InstrumentIds[] = Object.freeze([
     // independent prices, which is what corroboration needs.
     coinmarketcapId: null,
     coinmarketcapSymbol: "AAVE",
-    nansenChain: null,
-    nansenTokenAddresses: [],
-    nansenTokenSymbols: [],
+    nansenChain: "ethereum",
+    nansenTokenAddresses: ["0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9"],
+    nansenTokenSymbols: ["AAVE"],
   },
   {
     symbol: "ETCUSDT" as Symbol_,
@@ -528,9 +547,9 @@ export const INSTRUMENTS: readonly InstrumentIds[] = Object.freeze([
     // independent prices, which is what corroboration needs.
     coinmarketcapId: null,
     coinmarketcapSymbol: "ENA",
-    nansenChain: null,
-    nansenTokenAddresses: [],
-    nansenTokenSymbols: [],
+    nansenChain: "ethereum",
+    nansenTokenAddresses: ["0x57e114b691db790c35207b2e685d4a43181e6061"],
+    nansenTokenSymbols: ["ENA"],
   },
   {
     symbol: "ONDOUSDT" as Symbol_,
@@ -542,9 +561,9 @@ export const INSTRUMENTS: readonly InstrumentIds[] = Object.freeze([
     // independent prices, which is what corroboration needs.
     coinmarketcapId: null,
     coinmarketcapSymbol: "ONDO",
-    nansenChain: null,
-    nansenTokenAddresses: [],
-    nansenTokenSymbols: [],
+    nansenChain: "ethereum",
+    nansenTokenAddresses: ["0xfaba6f8e4a5e8ab82f62fe7c39859fa577269be3"],
+    nansenTokenSymbols: ["ONDO"],
   },
 ]);
 
