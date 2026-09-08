@@ -181,6 +181,59 @@ CREATE TABLE IF NOT EXISTS attestations (
 
 CREATE INDEX IF NOT EXISTS attestations_at ON attestations (at);
 
+-- The money Telt may commit to its own ideas.
+--
+-- One row, ever. A budget is a single standing permission, and a table that
+-- could hold two would eventually hold two that disagree.
+CREATE TABLE IF NOT EXISTS autonomy_budget (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  granted TEXT NOT NULL,
+  committed TEXT NOT NULL DEFAULT '0.00',
+  per_trade_cap TEXT NOT NULL,
+  armed_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  paused INTEGER NOT NULL DEFAULT 0
+);
+
+-- What was actually committed, and to what. The budget's committed total is
+-- the sum of these; keeping both means a disagreement is detectable rather than
+-- silent.
+CREATE TABLE IF NOT EXISTS autonomy_spend (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol TEXT NOT NULL,
+  amount TEXT NOT NULL,
+  order_ref TEXT,
+  at INTEGER NOT NULL
+);
+
+-- Every verdict, including the ones that led nowhere.
+--
+-- This is the missed-opportunity record, and it is the reason it exists: an
+-- agent that only writes down its trades cannot tell you what it passed on, so
+-- it can never learn that it passes on the wrong things. The acted column
+-- separates the two, and the pair together is what telt_review reads.
+CREATE TABLE IF NOT EXISTS autonomy_verdicts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  action TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  because TEXT NOT NULL,
+  acted INTEGER NOT NULL DEFAULT 0,
+  -- Filled in later by the same 24h pass that judges stops: what the price did
+  -- afterwards, so a pass can be graded as prudent or as a miss.
+  outcome_bps INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS autonomy_verdicts_at ON autonomy_verdicts (at);
+
+-- When Telt last paid to look at something, so a hunt every half hour does not
+-- re-buy the same evidence twelve times a day.
+CREATE TABLE IF NOT EXISTS autonomy_looks (
+  symbol TEXT PRIMARY KEY,
+  at INTEGER NOT NULL
+);
+
 -- What the agent did, and why. This is the part a person reads to decide
 -- whether they trust it: every autonomous action leaves a line here, including
 -- the ones where it looked and decided to do nothing.

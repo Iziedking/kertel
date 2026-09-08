@@ -62,6 +62,10 @@ import { createMonitor, sweep } from "./monitor.js";
 import type { Monitor, MonitorDeps, SweepResult } from "./monitor.js";
 import { watchHoldings } from "./watch.js";
 import { verifyAttestation } from "./verify.js";
+import { hunt, DEFAULT_MIN_VOLUME } from "./hunt.js";
+import type { HuntDeps, HuntOutcome } from "./hunt.js";
+import { createModelClient } from "./infra/model.js";
+import { describeBudget } from "@telt/core/autonomy";
 import { rankMovers, renderScan } from "@telt/core/research";
 import { renderAttestationBlock, serialize } from "@telt/core/attest";
 import { formatInstant } from "@telt/core/domain";
@@ -118,6 +122,14 @@ export type Runtime = {
   watch(deep: boolean): Promise<string>;
   /** Check a proof of research. Works on anyone's, not just Telt's own. */
   verify(text: string): Promise<string>;
+  /** Look for something to trade and act on it, within the discretionary budget. */
+  hunt(): Promise<HuntOutcome>;
+  /** Arm, pause or read the standing permission to trade unattended. */
+  autonomy: {
+    arm(input: { granted: string; perTrade: string; hours: number }): string;
+    pause(paused: boolean): string;
+    status(): string;
+  };
   /** Free. What moved over 24h, above a liquidity floor. Candidates, not advice. */
   scan(minQuoteVolume: string, limit: number): Promise<string>;
   review(limit: number): string;
@@ -334,6 +346,105 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   };
 
   const monitor = createMonitor(monitorDeps, MONITOR_INTERVAL_MS);
+
+  const model = createModelClient({
+    apiKey: config.anthropicApiKey,
+    model: config.model ?? "claude-sonnet-5",
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+  });
+
+  const huntDeps: HuntDeps = {
+    store,
+    binance,
+    model,
+    log,
+    now: () => clock.now(),
+    minQuoteVolume: fp.parse(DEFAULT_MIN_VOLUME),
+    research: async (symbol, goal) => {
+      const result = await research({ symbol, goal });
+      return { ok: result.ok, body: result.body, spent: result.spent };
+    },
+
+    /**
+     * An entry with no human typing the code.
+     *
+     * Deliberately propose-then-confirm rather than a second path into the
+     * exchange. Every check a human-driven order passes -- the policy engine,
+     * the exchange filters, the balance check, the slippage cap, and the hash
+     * that binds the code to the exact numbers shown -- runs here unchanged.
+     * The only difference is who supplies the code, which is precisely the one
+     * thing the discretionary budget authorises. A parallel "just place it"
+     * function would have been shorter and would have been a second place for
+     * a control to be forgotten.
+     */
+    openDiscretionary: async ({ symbol, notional }) => {
+      const proposed = await propose(tradingDeps, {
+        symbol,
+        side: "BUY",
+        notional: fp.format(notional),
+      });
+      if (!proposed.ok) return { ok: false, body: proposed.body, orderRef: null };
+
+      const code = /KTL-[A-Z0-9]+/.exec(proposed.body)?.[0];
+      if (code === undefined) {
+        return { ok: false, body: "Telt could not read back the code it just issued.", orderRef: null };
+      }
+
+      const filled = await confirm(tradingDeps, code);
+      return {
+        ok: filled.ok,
+        body: filled.body,
+        orderRef: /Order ref:\s+(\S+)/.exec(filled.body)?.[1] ?? null,
+      };
+    },
+
+    protect: async ({ symbol }) => {
+      // The same ladder a human would be offered, armed without being asked,
+      // because an autonomous entry with no exit is worse than no entry.
+      const plan = await planExit(planDeps, {
+        symbol,
+        ladder: [
+          { atBps: 3000, fractionBps: 5000 },
+          { atBps: 6000, fractionBps: 5000 },
+        ],
+        stopLossBps: 1000,
+        trailing: { activateAtBps: 2500, trailBps: 1500 },
+        breakevenAtBps: 1500,
+        quantity: null,
+        entryPrice: null,
+        holdDays: 7,
+        market: "spot",
+      });
+      if (!plan.ok) return { ok: false, body: plan.body };
+
+      const code = /KTL-[A-Z0-9]+/.exec(plan.body)?.[0];
+      if (code === undefined) return { ok: false, body: "Telt could not read back the plan code." };
+
+      const armed = await armPlan(planDeps, code);
+      return { ok: armed.ok, body: armed.body };
+    },
+
+    unwind: async (symbol, notional) => {
+      // Slightly under what was bought: fees mean the balance is a little less
+      // than the notional spent, and a sell for more than is held is refused
+      // outright -- which on this path would leave the position open.
+      const back = fp.multiply(notional, fp.parse("0.98"));
+      const sell = await propose(tradingDeps, {
+        symbol,
+        side: "SELL",
+        notional: fp.format(fp.trim(back, 2)),
+      });
+      if (!sell.ok) {
+        log.error("could not unwind an unprotected autonomous entry", { symbol, why: sell.refusalCode });
+        return false;
+      }
+      const code = /KTL-[A-Z0-9]+/.exec(sell.body)?.[0];
+      if (code === undefined) return false;
+      const done = await confirm(tradingDeps, code);
+      log.warn("unwound an unprotected autonomous entry", { symbol, ok: done.ok });
+      return done.ok;
+    },
+  };
 
   const watchDeps: WatchDeps = {
     store,
@@ -644,6 +755,28 @@ ${renderAttestationBlock(signed)}`;
     journal: (limit, withEvidence) => describeJournal(planDeps, limit, withEvidence),
     watch: (deep) => watchHoldings(watchDeps, { deep }),
     verify: async (text: string) => (await verifyAttestation(text)).body,
+    hunt: async () => hunt(huntDeps),
+
+    autonomy: {
+      arm: ({ granted, perTrade, hours }) => {
+        const now = clock.now();
+        // Replaces rather than adds. "Another ten dollars" has to mean ten.
+        store.autonomy.arm({
+          granted: fp.parse(granted),
+          committed: fp.parse("0.00"),
+          perTradeCap: fp.parse(perTrade),
+          armedAt: now,
+          expiresAt: (now + hours * 3_600_000) as Instant,
+          paused: false,
+        });
+        return describeBudget(store.autonomy.current(), clock.now());
+      },
+      pause: (paused: boolean) => {
+        store.autonomy.pause(paused);
+        return describeBudget(store.autonomy.current(), clock.now());
+      },
+      status: () => describeBudget(store.autonomy.current(), clock.now()),
+    },
     scan: async (minQuoteVolume: string, limit: number) => {
       const request = {
         quoteAsset: "USDT",

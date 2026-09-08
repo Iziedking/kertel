@@ -26,6 +26,8 @@
  */
 
 import { DatabaseSync } from "node:sqlite";
+
+import type { DiscretionaryBudget } from "@telt/core/autonomy";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -67,6 +69,7 @@ export type Store = {
   /** Standing exit plans, and the journal of what the agent did about them. */
   readonly mandates: MandateStore;
   readonly attestations: AttestationStore;
+  readonly autonomy: AutonomyStore;
   close(): void;
 };
 
@@ -137,6 +140,7 @@ export function openStore(path: string): Store {
     trades,
     mandates,
     attestations: attestationStore(db),
+    autonomy: autonomyStore(db),
     spentOn(day: Instant): FixedPoint {
       const row = db
         .prepare("SELECT spent_atoms FROM spend_ledger WHERE utc_day = ?")
@@ -319,6 +323,143 @@ function attestationStore(db: DatabaseSync): AttestationStore {
         .prepare("SELECT provenance, at FROM attestations ORDER BY at DESC LIMIT ?")
         .all(limit) as Record<string, unknown>[];
       return rows.map((row) => ({ provenance: String(row["provenance"]), at: Number(row["at"]) }));
+    },
+  };
+}
+
+/**
+ * The standing permission to trade unattended, and what it has been spent on.
+ *
+ * Two totals are kept: the budget's own `committed` figure and the sum of the
+ * individual spends. They should always agree, and keeping both means that if
+ * they ever stop agreeing it is visible rather than silent — which matters more
+ * here than anywhere else in Telt, because this is the one ledger nobody was
+ * watching being written.
+ */
+export type AutonomyStore = {
+  current(): DiscretionaryBudget | null;
+  arm(budget: DiscretionaryBudget): void;
+  pause(paused: boolean): void;
+  clear(): void;
+  commitSpend(amount: FixedPoint, symbol: string, orderRef: string | null, at: Instant): void;
+  /** The sum of recorded spends, for checking the running total against. */
+  spentTotal(): FixedPoint;
+  recordLook(symbol: string, at: Instant): void;
+  lastLooked(symbol: string): Instant | null;
+  recordVerdict(input: {
+    readonly symbol: string;
+    readonly at: Instant;
+    readonly action: string;
+    readonly confidence: number;
+    readonly because: string;
+    readonly acted: boolean;
+  }): void;
+  /** Recent verdicts, acted on or not. The missed-opportunity record. */
+  recentVerdicts(limit: number): readonly {
+    readonly symbol: string;
+    readonly at: number;
+    readonly action: string;
+    readonly confidence: number;
+    readonly because: string;
+    readonly acted: boolean;
+  }[];
+};
+
+function autonomyStore(db: DatabaseSync): AutonomyStore {
+  return {
+    current() {
+      const row = db.prepare("SELECT * FROM autonomy_budget WHERE id = 1").get() as
+        | Record<string, unknown>
+        | undefined;
+      if (row === undefined) return null;
+      return {
+        granted: fp.parse(String(row["granted"])),
+        committed: fp.parse(String(row["committed"])),
+        perTradeCap: fp.parse(String(row["per_trade_cap"])),
+        armedAt: Number(row["armed_at"]) as Instant,
+        expiresAt: Number(row["expires_at"]) as Instant,
+        paused: Number(row["paused"]) === 1,
+      };
+    },
+
+    arm(budget) {
+      // REPLACE, so arming a new budget supersedes the old one rather than
+      // adding to it. "Another ten dollars" has to mean ten, not twenty.
+      db.prepare(
+        `INSERT OR REPLACE INTO autonomy_budget
+           (id, granted, committed, per_trade_cap, armed_at, expires_at, paused)
+         VALUES (1, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        fp.format(budget.granted),
+        fp.format(budget.committed),
+        fp.format(budget.perTradeCap),
+        budget.armedAt,
+        budget.expiresAt,
+        budget.paused ? 1 : 0,
+      );
+    },
+
+    pause(paused) {
+      db.prepare("UPDATE autonomy_budget SET paused = ? WHERE id = 1").run(paused ? 1 : 0);
+    },
+
+    clear() {
+      db.prepare("DELETE FROM autonomy_budget WHERE id = 1").run();
+    },
+
+    commitSpend(amount, symbol, orderRef, at) {
+      db.prepare("INSERT INTO autonomy_spend (symbol, amount, order_ref, at) VALUES (?, ?, ?, ?)").run(
+        symbol,
+        fp.format(amount),
+        orderRef,
+        at,
+      );
+      const budget = this.current();
+      if (budget !== null) {
+        db.prepare("UPDATE autonomy_budget SET committed = ? WHERE id = 1").run(
+          fp.format(fp.add(budget.committed, amount)),
+        );
+      }
+    },
+
+    spentTotal() {
+      const rows = db.prepare("SELECT amount FROM autonomy_spend").all() as Record<string, unknown>[];
+      let total = fp.parse("0.00");
+      for (const row of rows) {
+        total = fp.add(total, fp.parse(String(row["amount"])));
+      }
+      return total;
+    },
+
+    recordLook(symbol, at) {
+      db.prepare("INSERT OR REPLACE INTO autonomy_looks (symbol, at) VALUES (?, ?)").run(symbol, at);
+    },
+
+    lastLooked(symbol) {
+      const row = db.prepare("SELECT at FROM autonomy_looks WHERE symbol = ?").get(symbol) as
+        | Record<string, unknown>
+        | undefined;
+      return row === undefined ? null : (Number(row["at"]) as Instant);
+    },
+
+    recordVerdict(input) {
+      db.prepare(
+        "INSERT INTO autonomy_verdicts (symbol, at, action, confidence, because, acted) VALUES (?, ?, ?, ?, ?, ?)",
+      ).run(input.symbol, input.at, input.action, input.confidence, input.because, input.acted ? 1 : 0);
+    },
+
+    recentVerdicts(limit) {
+      const rows = db
+        .prepare("SELECT * FROM autonomy_verdicts ORDER BY at DESC LIMIT ?")
+        .all(limit) as Record<string, unknown>[];
+      return rows.map((row) => ({
+        symbol: String(row["symbol"]),
+        at: Number(row["at"]),
+        action: String(row["action"]),
+        confidence: Number(row["confidence"]),
+        because: String(row["because"]),
+        acted: Number(row["acted"]) === 1,
+      }));
     },
   };
 }

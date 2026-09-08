@@ -89,6 +89,14 @@ export function buildServer(runtime: Runtime): McpServer {
         "- \"sell it\" / \"get me out\" / \"close it\"",
         "    -> telt_propose SELL for spot, telt_futures_close for futures.",
         "- \"what did you do\" / \"how have my trades gone\" -> telt_journal, then telt_review.",
+        "- \"go find me something\" / \"anything worth doing\" -> telt_hunt, if a budget is armed.",
+        "- \"you can spend $10 on your own ideas\" -> telt_autonomy_arm. Say the numbers back first.",
+        "",
+        "AUTONOMY. telt_hunt is the only path where Telt opens a position nobody asked for, and it",
+        "needs a budget armed by the human first. Never arm one on your own initiative, never pick",
+        "the amount for them, and never describe Telt as acting unattended without checking",
+        "telt_autonomy_status. A hunt that ends in no trade is the normal outcome; report it as",
+        "discipline, not as failure.",
         "",
         "Chain the obvious next step instead of stopping to ask permission for a read. Reads are free and",
         "harmless: status, watch, positions, journal, review. Only two things need the human, and they",
@@ -179,6 +187,77 @@ export function buildServer(runtime: Runtime): McpServer {
       },
     },
     async ({ minQuoteVolume, limit }) => guard(async () => text(await runtime.scan(minQuoteVolume, limit))),
+  );
+
+  server.registerTool(
+    "telt_hunt",
+    {
+      title: "Telt hunt",
+      description:
+        "Look for something worth trading and act on it, alone. Telt scans the venue, picks ONE " +
+        "candidate, pays for evidence about it, reasons over that evidence with its own model, and " +
+        "opens a position ONLY if the verdict is confident, states its risks, and there is " +
+        "discretionary budget left. Anything it opens is protected with an exit plan in the same " +
+        "run. Most runs correctly end in no trade -- that is the design, not a failure. Requires a " +
+        "budget armed with telt_autonomy_arm; without one it refuses and explains. Use when the " +
+        "user asks Telt to go looking, or to check whether there is anything worth doing.",
+      inputSchema: {},
+    },
+    async () => guard(async () => text((await runtime.hunt()).body)),
+  );
+
+  server.registerTool(
+    "telt_autonomy_arm",
+    {
+      title: "Telt arm autonomy",
+      description:
+        "Grant Telt a budget it may spend on ideas of its own, without asking each time. This is " +
+        "the ONLY way Telt can open a position nobody requested. It replaces any existing budget " +
+        "rather than adding to it. The budget depletes and does not refill; it expires; futures is " +
+        "charged the margin rather than the notional; and every other limit -- per-trade cap, " +
+        "slippage, daily loss, kill switch -- still applies unchanged. Read the amount back to the " +
+        "user before calling this, and never choose the numbers for them.",
+      inputSchema: {
+        granted: z
+          .string()
+          .regex(/^\d+(\.\d+)?$/)
+          .describe("Total the agent may commit, in USDT. Say it back to the user before arming."),
+        perTrade: z
+          .string()
+          .regex(/^\d+(\.\d+)?$/)
+          .describe("Most that may go into any single self-found idea."),
+        hours: z
+          .number()
+          .int()
+          .positive()
+          .max(168)
+          .default(24)
+          .describe("How long the permission lasts. Consent should not outlive the day it was given."),
+      },
+    },
+    async ({ granted, perTrade, hours }) =>
+      guard(async () => text(runtime.autonomy.arm({ granted, perTrade, hours }))),
+  );
+
+  server.registerTool(
+    "telt_autonomy_status",
+    {
+      title: "Telt autonomy status",
+      description:
+        "What Telt may spend on its own ideas, what it has already committed, and how long the " +
+        "permission lasts. Pass paused to stop or resume it without losing the remaining budget. " +
+        "Check this before telling a user Telt is or is not acting unattended.",
+      inputSchema: {
+        paused: z
+          .boolean()
+          .optional()
+          .describe("Set true to stop Telt acting on its own; false to resume. Omit to just read."),
+      },
+    },
+    async ({ paused }) =>
+      guard(async () =>
+        text(paused === undefined ? runtime.autonomy.status() : runtime.autonomy.pause(paused)),
+      ),
   );
 
   server.registerTool(

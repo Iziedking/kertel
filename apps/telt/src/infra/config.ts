@@ -107,6 +107,14 @@ export type TeltConfig = {
   readonly maxFuturesNotional: FixedPoint;
   readonly model: string | null;
   /**
+   * The key for Telt's own reasoning layer.
+   *
+   * Only the daemon needs it, and only for hunting: with a human present the
+   * client's model does the reasoning and Telt never calls one itself. Absent,
+   * everything works except acting on an opportunity nobody asked about.
+   */
+  readonly anthropicApiKey: string | null;
+  /**
    * Reasons a pillar is unavailable, in the operator's words.
    *
    * This is what the health tool prints. An empty list means everything the
@@ -374,6 +382,9 @@ export function loadConfig(env: Env): TeltConfig {
     maxLeverage,
     maxFuturesNotional: fp.parse(maxFuturesRaw ?? "50.00"),
     model: setting(env, "MODEL"),
+    // Not TELT_-prefixed: it is Anthropic's own conventional name, and an
+    // operator who already has it exported should not have to copy it.
+    anthropicApiKey: present(env["ANTHROPIC_API_KEY"]),
     degraded,
   };
 }

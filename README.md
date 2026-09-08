@@ -33,6 +33,8 @@ Four facts, none of which come from Telt:
 
 It only works because x402 payments and Agent OS orders are both independently auditable. It is what this stack is *for*.
 
+**How it works, end to end:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## Everything else it does
 
 A trading agent for **Binance Spot and USDⓈ-M futures** that finds candidates, buys its own research, refuses what it cannot justify, and manages positions on its own once you approve a plan.
