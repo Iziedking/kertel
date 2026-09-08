@@ -85,15 +85,17 @@ the cheaper answer failed to settle the question:
 | 0 | free | Binance price | The venue the order lands on |
 | 1 | $0.01 | CoinGecko price | So the number is not one venue's opinion |
 | 1 | $0.01 | CoinMarketCap | Bought **only** to break a >100bps disagreement |
-| 2 | $0.01 | OpenPulse **safety** | Honeypot, mint authority, ownership |
-| 2 | $0.01 | OpenPulse **sentiment** | What is being said, aggregated |
-| 2 | $0.005 | OpenPulse **candles** | Range, and where price sits in it |
 | 2 | $0.05 | Nansen Smart Money | Conviction, not price. The dearest, so the last |
 | 3 | $0.01 | The Graph | Pool detail. Not wired; the receipt says so |
 
-**Safety is bought before conviction.** It can only ever stop a trade, and
-discovering a honeypot after paying five cents for flow data is paying to learn
-things in the wrong order.
+**A source is wired only after being paid for and checked against something
+already known.** Three OpenPulse endpoints were built, paid for, and removed:
+sentiment charges and answers 401, and safety answers about a different chain —
+asked about WETH on Base it returned "not a smart contract" and "no liquidity
+pool found". Both would have been invisible from the catalogue, and the safety
+one would have graded every Binance-listed token F, making the reasoning layer
+refuse every trade for ever. A failure that looks like caution is the worst kind
+to ship.
 
 Three controls sit around every payment:
 
@@ -302,6 +304,9 @@ Stated plainly, because an architecture that only lists strengths is marketing.
 - **No limit orders.** Modelled throughout, wired nowhere. Market only.
 - **No shorts in exit plans.** Every trigger reads a gain as price rising above
   entry, so a short inverts all of them. Long-only, on both venues.
+- **No sentiment or technical indicators.** The one live x402 provider found for
+  them takes payment and returns either an error or data about the wrong chain.
+  Telt buys prices and Smart Money flows; it does not claim more.
 - **Paid coverage is not universal.** Only ETHUSDT and BTCUSDT have verified
   provider ids. Anything else trades normally and comes back with venue data
   alone — and the receipt says so rather than implying corroboration.

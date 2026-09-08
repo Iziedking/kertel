@@ -273,7 +273,8 @@ Verified on 2026-09-08 against live endpoints.
 
 | Capability | State |
 | --- | --- |
-| Research over x402 (CoinGecko, CoinMarketCap, Nansen) | Live. All four providers probed, pins matched, prices confirmed. |
+| Research over x402 (CoinGecko, CoinMarketCap, Nansen) | Live. All providers probed, pins matched, prices confirmed. |
+| OpenPulse (sentiment, safety, candles) | Wired, then removed after paying for it. Sentiment charges and answers 401; safety answers about a chain Telt does not trade on, grading WETH-on-Base as "not a smart contract". The adapters remain, unwired, with the evidence recorded. |
 | Binance B402 rail | Live. CoinMarketCap and Nansen settle in $U on BNB Smart Chain. |
 | Free Binance market data | Live. |
 | Spot order execution via Agent OS | Wired and verified against the live server: filters, book and account all read through `tool_execute`. Needs funding. |

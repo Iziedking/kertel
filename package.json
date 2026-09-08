@@ -27,6 +27,8 @@
     "probe:watch": "tsx scripts/probe-watch.ts",
     "probe:scan": "tsx scripts/probe-scan.ts",
     "probe:proof": "tsx scripts/probe-proof.ts",
+    "probe:model": "tsx scripts/probe-model.ts",
+    "probe:openpulse": "tsx scripts/probe-openpulse.ts",
     "serve": "node apps/telt/dist/serve.js"
   },
   "devDependencies": {

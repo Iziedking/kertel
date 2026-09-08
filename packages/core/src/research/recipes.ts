@@ -61,8 +61,8 @@ const CHEAP = fp.parse("0.01");
 const NANSEN = fp.parse("0.05");
 
 /*
- * Two OpenPulse steps were written and then removed before shipping, and the
- * reason is worth keeping:
+ * All three OpenPulse steps were written and then removed before shipping, and
+ * the reasons are worth keeping because each was found by paying:
  *
  * - The sentiment endpoint charges, takes the money, and answers 401. Verified
  *   on 2026-09-08 with a real payment. An endpoint that does that is not merely
@@ -73,8 +73,23 @@ const NANSEN = fp.parse("0.05");
  *   an unverified endpoint from the same provider is not something to put in
  *   the path of a live trade on the strength of a catalogue entry.
  *
- * The adapters for both remain in @telt/providers, unwired. Pay for one, see
- * what arrives, and add the step back — in that order.
+ * - The safety endpoint answers, and answers wrongly for anything Telt trades.
+ *   Asked about WETH on Base it returned grade F, "Not a smart contract", "No
+ *   liquidity pool found", "0 holders" and "created less than 24h ago" — for
+ *   one of the most liquid contracts in existence. Its catalogue declares Base
+ *   only as the network it is PAID on and never says which chain it indexes,
+ *   and the domain is openpulsechain. A Base-indexing API does not describe
+ *   WETH that way. Wired into the recipe it would have graded every
+ *   Binance-listed token F with zero liquidity, and the reasoning layer would
+ *   then have correctly refused every trade for ever — a failure that would
+ *   have looked like caution rather than like a bug.
+ *
+ * The three adapters remain in @telt/providers, unwired, because the code is
+ * correct and only the provider is wrong. If a paid source is added here again,
+ * the bar is the one this episode set: pay for it, and check the answer against
+ * something already known to be true. A 402 proves an endpoint will take your
+ * money; a well-formed payload proves nothing about whether it is about the
+ * asset you asked for.
  */
 
 /**
@@ -118,21 +133,6 @@ export const RECIPE_STEPS: readonly RecipeStep[] = Object.freeze([
     estimatedCost: CHEAP,
     freshness: seconds(120),
     rationale: "A second independent price. Bought only to break a disagreement between the first two.",
-  },
-  {
-    // Bought before conviction, not after. This one can only ever stop a
-    // trade, and discovering a honeypot after paying five cents for flow data
-    // is paying to learn something in the wrong order.
-    id: "openpulse.safety",
-    provider: "openpulse",
-    capability: "onchain.safety",
-    endpointId: "openpulse:token/safety",
-    kind: "onchain",
-    tier: 2,
-    estimatedCost: CHEAP,
-    freshness: seconds(3600),
-    rationale:
-      "Honeypot, mint authority and ownership on the contract itself. A floor rather than an edge: it exists to stop a trade, so it is bought before anything that justifies one.",
   },
   {
     id: "nansen.netflow",
