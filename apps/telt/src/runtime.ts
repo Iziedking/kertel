@@ -17,6 +17,7 @@ import type { DecisionInput } from "./infra/research-store.js";
  */
 
 import * as fp from "@telt/core/money";
+import type { FixedPoint } from "@telt/core/money";
 import { systemClock, utcDay } from "@telt/core/domain";
 import type {
   Clock,
@@ -63,6 +64,7 @@ import {
 import type { FuturesDeps, FuturesOutcome } from "./futures-trading.js";
 import { describeHedge, proposeHedge } from "./hedge.js";
 import { classifyGuard } from "./guard.js";
+import { aggregateRisk } from "./risk.js";
 import type { ProtectionMandate } from "./infra/mandate-store.js";
 import { checkProtection, memoryLane } from "./protection.js";
 import { loadFixtureExchanges } from "./infra/fixtures.js";
@@ -251,6 +253,14 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     createLogger({ level: config.logLevel }).child({ component: "telt" });
   const store = options.store ?? openStore(`${config.dataDir}/telt.sqlite`);
 
+  const interruptedGuardOperations = store.mandates.unresolvedGuardOperations();
+  if (interruptedGuardOperations.length > 0 && !store.safetyState().killSwitchEngaged) {
+    store.engageKillSwitch(
+      `Guard Mode found ${String(interruptedGuardOperations.length)} unresolved adjustment(s) after restart. Reconcile the exchange position before resuming.`,
+      clock.now(),
+    );
+  }
+
   // A recipe step with no adapter is a step the planner will select and then
   // fail on, mid-run, after the cheaper calls have already been paid for.
   // Failing at construction turns a wasted spend into a startup error.
@@ -410,51 +420,174 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       return { ok: result.ok, body: result.body };
     },
     newId: tradingDeps.newId,
+    checkpoint: (input) => store.setMonitorCheckpoint?.(input),
     guardSweep: async () => {
-      const mandates = store.mandates.allProtection().filter((mandate) => mandate.status === "active");
+      const sweepStartedAt = clock.now();
+      const mandates = store.mandates.allProtection().filter(
+        (mandate) => mandate.status === "active" && mandate.expiresAt > sweepStartedAt,
+      );
       if (mandates.length === 0) return [];
       const lines: string[] = [];
+      const riskPositions: { symbol: string; spotNotional: FixedPoint; hedgeNotional: FixedPoint }[] = [];
+      const accountForRisk = futuresDeps === null ? null : await binance.account();
+      let riskStateComplete = accountForRisk?.ok === true && futuresDeps !== null;
+      if (accountForRisk?.ok && futuresDeps !== null) {
+        for (const mandate of mandates) {
+          const rules = await binance.filters(mandate.symbol as Symbol_);
+          const market = await binance.market(mandate.symbol as Symbol_);
+          const position = await futuresDeps.futures.position(mandate.symbol as Symbol_);
+          if (!rules.ok || !market.ok || !position.ok) {
+            riskStateComplete = false;
+            continue;
+          }
+          const balance = accountForRisk.value.balances.find((entry) => entry.asset === rules.value.baseAsset);
+          const spot = balance === undefined ? fp.parse("0") : fp.add(balance.free, balance.locked);
+          riskPositions.push({ symbol: mandate.symbol, spotNotional: fp.multiply(spot, market.value.bestBid), hedgeNotional: position.value.notional });
+        }
+      }
+      if (riskPositions.length !== mandates.length) riskStateComplete = false;
+      const aggregate = aggregateRisk({ positions: riskPositions, maxTotalExposure: config.maxTotalExposure, maxTotalHedgeNotional: config.maxTotalHedgeNotional, complete: riskStateComplete });
+      if (!aggregate.allowed) lines.push(`Aggregate risk gate: ${aggregate.reason}`);
       for (const mandate of mandates) {
         const status = await guardStatus(mandate.symbol);
         lines.push(status.replace(/\n/g, " | "));
-        const current = store.mandates.activeProtection(mandate.symbol);
+        const current = store.mandates.activeProtection(mandate.symbol, clock.now());
         const now = clock.now();
         const actionable = status.includes("UNPROTECTED") || status.includes("UNDERHEDGED") || status.includes("OVERHEDGED");
         const cooling = current?.lastActionAt !== null && current?.lastActionAt !== undefined && now - current.lastActionAt < current.cooldownMs;
-        if (!actionable || current === null || cooling || futuresDeps === null || config.mode !== "live" || !config.policy.trading.liveExecutionEnabled) continue;
-        const [rules, account, position, mark] = await Promise.all([binance.filters(current.symbol as Symbol_), binance.account(), futuresDeps.futures.position(current.symbol as Symbol_), futuresDeps.futures.markPrice(current.symbol as Symbol_)]);
-        if (!rules.ok || !account.ok || !position.ok || !mark.ok) { lines.push(`Guard action paused for ${current.symbol}: state became unknown during the fresh read.`); continue; }
-        const balance = account.value.balances.find((entry) => entry.asset === rules.value.baseAsset);
+        if (!aggregate.complete || !actionable || current === null || cooling || futuresDeps === null || config.mode !== "live" || !config.policy.trading.liveExecutionEnabled) continue;
+        const [spotRules, futuresRules, account, position, mark] = await Promise.all([
+          binance.filters(current.symbol as Symbol_),
+          futuresDeps.futures.filters(current.symbol as Symbol_),
+          binance.account(),
+          futuresDeps.futures.position(current.symbol as Symbol_),
+          futuresDeps.futures.markPrice(current.symbol as Symbol_),
+        ]);
+        if (!spotRules.ok || !futuresRules.ok || !account.ok || !position.ok || !mark.ok) {
+          lines.push(`Guard action paused for ${current.symbol}: state became unknown during the fresh read.`);
+          continue;
+        }
+        if (fp.isPositive(position.value.positionAmt)) {
+          lines.push(`Guard action paused for ${current.symbol}: an existing Futures long conflicts with a protective short.`);
+          continue;
+        }
+        if (!fp.isZero(position.value.positionAmt) && !position.value.isolated) {
+          lines.push(`Guard action paused for ${current.symbol}: the existing Futures position is on cross margin.`);
+          continue;
+        }
+        const balance = account.value.balances.find((entry) => entry.asset === spotRules.value.baseAsset);
         const spot = balance === undefined ? fp.parse("0") : fp.add(balance.free, balance.locked);
         const short = fp.isNegative(position.value.positionAmt) ? fp.abs(position.value.positionAmt) : fp.parse("0");
-        const decision = classifyGuard({ spotQuantity: spot, futuresShortQuantity: short, targetCoverageBps: current.targetCoverageBps, toleranceBps: current.toleranceBps, maxAgeMs: 30_000, observedAt: clock.now(), now, marketAvailable: true });
+        const decision = classifyGuard({ spotQuantity: spot, futuresShortQuantity: short, targetCoverageBps: current.targetCoverageBps, toleranceBps: current.toleranceBps, maxAgeMs: 30_000, observedAt: account.value.observedAt, now, marketAvailable: true });
+        if (!aggregate.allowed && decision.state !== "overhedged") {
+          lines.push(`Guard action paused for ${current.symbol}: ${aggregate.reason}`);
+          continue;
+        }
         const adjustment = decision.adjustmentQuantity;
-        const maxAdjustment = fp.applyBasisPoints(spot, current.maxAdjustmentBps, "floor");
-        if (adjustment === null || !fp.isPositive(adjustment) || fp.greaterThan(adjustment, maxAdjustment) || fp.greaterThan(fp.multiply(adjustment, mark.value), fp.parse(current.maxNotional))) { lines.push(`Guard action paused for ${current.symbol}: adjustment is outside the mandate cap.`); continue; }
-        if (fp.lessThan(adjustment, rules.value.minQuantity)) { lines.push(`Guard action paused for ${current.symbol}: adjustment is below the exchange lot minimum.`); continue; }
-        const isolated = await futuresDeps.futures.setIsolated(current.symbol as Symbol_);
-        if (!isolated.ok) { lines.push(`Guard action paused for ${current.symbol}: could not set isolated margin.`); continue; }
-        const levered = await futuresDeps.futures.setLeverage(current.symbol as Symbol_, current.leverage);
-        if (!levered.ok) { lines.push(`Guard action paused for ${current.symbol}: could not set leverage.`); continue; }
-        const clientOrderId = clientOrderIdFrom(sha256(`telt.guard.v1\n${current.id}\n${current.version}\n${decision.state}\n${fp.format(adjustment)}`));
+        const rawQuantity = adjustment === null ? null : fp.abs(adjustment);
+        const maxAdjustment = decision.state === "unprotected" && decision.targetQuantity !== null
+          ? decision.targetQuantity
+          : decision.state === "overhedged" && !fp.isPositive(spot)
+            ? short
+            : fp.applyBasisPoints(fp.rescale(spot, Math.min(38, spot.scale + 4), "trunc"), current.maxAdjustmentBps, "floor");
+        const boundedQuantity = rawQuantity === null ? null : fp.min(rawQuantity, maxAdjustment);
+        const quantity = boundedQuantity === null ? null : fp.floorToStep(boundedQuantity, futuresRules.value.stepSize);
+        const adjustmentNotional = fp.multiply(quantity ?? fp.parse("0"), mark.value);
+        const currentHedgeNotional = fp.multiply(short, mark.value);
+        const projectedSymbolHedge = decision.state === "overhedged"
+          ? (fp.greaterThan(currentHedgeNotional, adjustmentNotional) ? fp.subtract(currentHedgeNotional, adjustmentNotional) : fp.parse("0"))
+          : fp.add(currentHedgeNotional, adjustmentNotional);
+        const projectedHedge = decision.state === "overhedged"
+          ? (fp.greaterThan(aggregate.totalHedgeNotional, adjustmentNotional) ? fp.subtract(aggregate.totalHedgeNotional, adjustmentNotional) : fp.parse("0"))
+          : fp.add(aggregate.totalHedgeNotional, adjustmentNotional);
+        if (quantity === null || !fp.isPositive(quantity)) {
+          lines.push(`Guard action paused for ${current.symbol}: no executable quantity remains after applying the Futures lot step.`);
+          continue;
+        }
+        if (decision.state !== "overhedged" && fp.greaterThan(projectedSymbolHedge, fp.parse(current.maxNotional))) {
+          lines.push(`Guard action paused for ${current.symbol}: projected hedge ${fp.format(projectedSymbolHedge)} USDT exceeds the ${current.maxNotional} USDT mandate cap.`);
+          continue;
+        }
+        if (decision.state !== "overhedged" && fp.greaterThan(projectedHedge, config.maxTotalHedgeNotional)) {
+          lines.push(`Guard action paused for ${current.symbol}: projected Guard portfolio hedge ${fp.format(projectedHedge)} USDT exceeds the ${fp.format(config.maxTotalHedgeNotional)} USDT ceiling.`);
+          continue;
+        }
+        if (fp.lessThan(quantity, futuresRules.value.minQuantity) || fp.greaterThan(quantity, futuresRules.value.maxQuantity) || fp.lessThan(adjustmentNotional, futuresRules.value.minNotional)) {
+          lines.push(`Guard action paused for ${current.symbol}: adjustment does not satisfy the Futures lot or notional filter.`);
+          continue;
+        }
+        if (decision.state !== "overhedged") {
+          const isolated = await futuresDeps.futures.setIsolated(current.symbol as Symbol_);
+          if (!isolated.ok) { lines.push(`Guard action paused for ${current.symbol}: could not set isolated margin.`); continue; }
+          const levered = await futuresDeps.futures.setLeverage(current.symbol as Symbol_, current.leverage);
+          if (!levered.ok) { lines.push(`Guard action paused for ${current.symbol}: could not set leverage.`); continue; }
+        }
+        const idempotencyKey = sha256(`telt.guard.v2\n${current.id}\n${current.version}\n${String(current.lastActionAt ?? current.createdAt)}\n${decision.state}\n${fp.format(spot)}\n${fp.format(short)}\n${fp.format(quantity)}`);
+        const clientOrderId = clientOrderIdFrom(idempotencyKey);
+        const operationId = tradingDeps.newId("guard-op");
+        const claimed = store.mandates.claimGuardOperation({
+          id: operationId,
+          mandateId: current.id,
+          symbol: current.symbol,
+          idempotencyKey,
+          clientOrderId,
+          action: decision.state === "overhedged" ? "reduce" : "increase",
+          quantity: fp.format(quantity),
+          status: "planned",
+          orderRef: null,
+          filledQuantity: "0",
+          createdAt: now,
+          updatedAt: now,
+        });
+        if (!claimed) {
+          const previous = store.mandates.findGuardOperation(idempotencyKey);
+          const previousStatus = previous?.status ?? "unknown";
+          if (previousStatus !== "filled" && previousStatus !== "rejected") {
+            store.engageKillSwitch(`Guard Mode found an unresolved duplicate adjustment for ${current.symbol}.`, now);
+          }
+          lines.push(`Guard action skipped for ${current.symbol}: adjustment ${previousStatus} is already recorded.`);
+          continue;
+        }
+        store.mandates.updateGuardOperation(operationId, { status: "submitted", at: now });
         const filled = decision.state === "overhedged"
-          ? await futuresDeps.futures.close({ symbol: current.symbol as Symbol_, position: position.value, quantity: adjustment, clientOrderId })
-          : await futuresDeps.futures.open({ symbol: current.symbol as Symbol_, side: "SELL", quantity: adjustment, clientOrderId });
+          ? await futuresDeps.futures.close({ symbol: current.symbol as Symbol_, position: position.value, quantity, clientOrderId })
+          : await futuresDeps.futures.open({ symbol: current.symbol as Symbol_, side: "SELL", quantity, clientOrderId });
         if (!filled.ok) {
-          if (filled.error.code === "EXECUTION_RESULT_UNKNOWN") store.engageKillSwitch(`Guard order for ${current.symbol} was sent and not confirmed.`, now);
+          const unknown = filled.error.code === "EXECUTION_RESULT_UNKNOWN";
+          store.mandates.updateGuardOperation(operationId, { status: unknown ? "unknown" : "rejected", at: clock.now() });
+          if (unknown) store.engageKillSwitch(`Guard order for ${current.symbol} was sent and not confirmed.`, now);
           lines.push(`Guard action unresolved for ${current.symbol}: ${filled.error.detail}`);
           continue;
         }
+        if (filled.value.status.toUpperCase() !== "FILLED") {
+          store.mandates.updateGuardOperation(operationId, { status: "partial", orderRef: filled.value.orderRef, filledQuantity: fp.format(filled.value.filledQuantity), at: clock.now() });
+          store.engageKillSwitch(`Guard order ${filled.value.orderRef} for ${current.symbol} is ${filled.value.status}; reconcile the fill before resuming.`, clock.now());
+          lines.push(`Guard halted for ${current.symbol}: order ${filled.value.orderRef} is ${filled.value.status}.`);
+          continue;
+        }
         const after = await futuresDeps.futures.position(current.symbol as Symbol_);
-        if (!after.ok || (decision.state === "overhedged" && fp.greaterThan(fp.abs(after.value.positionAmt), fp.applyBasisPoints(spot, current.targetCoverageBps + current.toleranceBps, "ceil")))) {
+        const expectedShort = decision.state === "overhedged"
+          ? (fp.greaterThan(short, quantity) ? fp.subtract(short, quantity) : fp.parse("0"))
+          : fp.add(short, quantity);
+        const afterShort = after.ok && fp.isNegative(after.value.positionAmt)
+          ? fp.abs(after.value.positionAmt)
+          : fp.parse("0");
+        const finalDecision = after.ok
+          ? classifyGuard({ spotQuantity: spot, futuresShortQuantity: afterShort, targetCoverageBps: current.targetCoverageBps, toleranceBps: current.toleranceBps, maxAgeMs: 30_000, observedAt: account.value.observedAt, now: clock.now(), marketAvailable: true })
+          : null;
+        if (!after.ok || finalDecision === null || fp.isPositive(after.value.positionAmt) || !fp.equals(afterShort, expectedShort) || finalDecision.state === "unknown") {
+          store.mandates.updateGuardOperation(operationId, { status: "unknown", orderRef: filled.value.orderRef, filledQuantity: fp.format(filled.value.filledQuantity), at: clock.now() });
           store.engageKillSwitch(`Guard Mode could not prove the final Futures state for ${current.symbol}.`, now);
           lines.push(`Guard halted for ${current.symbol}: final position could not be proven.`);
           continue;
         }
-        if (after.ok && !fp.isZero(after.value.positionAmt)) store.mandates.adopt({ symbol: current.symbol, entryPrice: fp.format(after.value.entryPrice), quantity: fp.format(fp.abs(after.value.positionAmt)), source: "telt-guard", at: now });
-        store.mandates.checkpointProtection(current.id, { at: now, state: "hedge_opened", actionAt: now });
-        store.mandates.journal({ at: now, kind: "hedge_opened", symbol: current.symbol, mandateId: current.id, headline: `Guard Mode opened or resized ${current.symbol}`, detail: `The mandate authorized ${String(current.targetCoverageBps / 100)}% coverage at ${String(current.leverage)}x isolated. Order ${filled.value.orderRef} is ${filled.value.status} with ${fp.format(filled.value.filledQuantity)} filled.`, evidence: null });
-        lines.push(`Guard action completed for ${current.symbol}: Futures short reconciled.`);
+        store.mandates.updateGuardOperation(operationId, { status: "filled", orderRef: filled.value.orderRef, filledQuantity: fp.format(filled.value.filledQuantity), at: clock.now() });
+        if (!fp.isZero(after.value.positionAmt)) store.mandates.adopt({ symbol: current.symbol, entryPrice: fp.format(after.value.entryPrice), quantity: fp.format(fp.abs(after.value.positionAmt)), source: "telt-guard", at: now });
+        else store.mandates.forgetAdopted(current.symbol);
+        store.mandates.checkpointProtection(current.id, { at: now, state: finalDecision.state, actionAt: now });
+        const actionLabel = decision.state === "overhedged" ? "reduced" : fp.isZero(short) ? "opened" : "increased";
+        store.mandates.journal({ at: now, kind: "hedge_opened", symbol: current.symbol, mandateId: current.id, headline: `Guard Mode ${actionLabel} ${current.symbol}`, detail: `The mandate authorized ${String(current.targetCoverageBps / 100)}% coverage at ${String(current.leverage)}x isolated. Order ${filled.value.orderRef} is ${filled.value.status} with ${fp.format(filled.value.filledQuantity)} filled.`, evidence: null });
+        lines.push(`Guard action completed for ${current.symbol}: Futures short reconciled as ${finalDecision.state}.`);
       }
       return lines;
     },
@@ -895,11 +1028,11 @@ ${renderAttestationBlock(signed)}`;
 
   function armGuard(input: { readonly symbol: string; readonly coverageBps: number; readonly leverage: number; readonly hours: number }): string {
     const symbol = input.symbol.trim().toUpperCase();
-    if (!/^[A-Z0-9]{5,20}USDT$/.test(symbol)) return "Guard refused: use a Binance USDT pair such as BTCUSDT.";
+    if (!/^[A-Z0-9]{2,16}USDT$/.test(symbol)) return "Guard refused: use a Binance USDT pair such as BTCUSDT.";
     if (!Number.isInteger(input.coverageBps) || input.coverageBps < 9000 || input.coverageBps > 10000) return "Guard refused: coverage must be between 9000 and 10000 basis points (90–100%).";
     if (!Number.isInteger(input.leverage) || input.leverage < 1 || input.leverage > config.maxLeverage) return `Guard refused: leverage must be a whole number from 1 to ${String(config.maxLeverage)}.`;
     if (!Number.isInteger(input.hours) || input.hours < 1 || input.hours > 168) return "Guard refused: expiry must be between 1 and 168 hours.";
-    const existing = store.mandates.activeProtection(symbol);
+    const existing = store.mandates.activeProtection(symbol, clock.now());
     if (existing !== null) return `Guard already active for ${symbol} (mandate ${existing.id}, version ${String(existing.version)}). Revoke it before replacing it.`;
     const now = clock.now();
     const mandate: ProtectionMandate = {
@@ -926,7 +1059,7 @@ ${renderAttestationBlock(signed)}`;
 
   function revokeGuard(symbol: string): string {
     const normalized = symbol.trim().toUpperCase();
-    const mandate = store.mandates.activeProtection(normalized);
+    const mandate = store.mandates.activeProtection(normalized, clock.now());
     if (mandate === null) return `No active Guard Mode mandate for ${normalized}.`;
     const now = clock.now();
     store.mandates.revokeProtection(mandate.id, now);
@@ -935,16 +1068,19 @@ ${renderAttestationBlock(signed)}`;
   }
 
   async function guardStatus(symbol?: string): Promise<string> {
-    const mandate = store.mandates.activeProtection(symbol?.trim().toUpperCase());
+    const now = clock.now();
+    const mandate = store.mandates.activeProtection(symbol?.trim().toUpperCase(), now);
     if (mandate === null) return symbol === undefined ? "Guard Mode is not armed for any symbol." : `Guard Mode is not armed for ${symbol.trim().toUpperCase()}.`;
     if (futuresDeps === null) return `Guard Mode ${mandate.id} is armed for ${mandate.symbol}, but Binance Agent OS Futures is unavailable. State is unknown and Telt will not act.`;
     const [rules, account, position, mark] = await Promise.all([binance.filters(mandate.symbol as Symbol_), binance.account(), futuresDeps.futures.position(mandate.symbol as Symbol_), futuresDeps.futures.markPrice(mandate.symbol as Symbol_)]);
     if (!rules.ok || !account.ok || !position.ok || !mark.ok) return `Guard Mode ${mandate.id} is UNKNOWN for ${mandate.symbol}. Telt will not act until all account, position, price and filter reads succeed.`;
     const balance = account.value.balances.find((entry) => entry.asset === rules.value.baseAsset);
     const spot = balance === undefined ? fp.parse("0") : fp.add(balance.free, balance.locked);
-    const observation = classifyGuard({ spotQuantity: spot, futuresShortQuantity: fp.isNegative(position.value.positionAmt) ? fp.abs(position.value.positionAmt) : fp.parse("0"), targetCoverageBps: mandate.targetCoverageBps, toleranceBps: mandate.toleranceBps, maxAgeMs: 30_000, observedAt: clock.now(), now: clock.now(), marketAvailable: true });
-    store.mandates.checkpointProtection(mandate.id, { at: clock.now(), state: observation.state });
-    store.mandates.journal({ at: clock.now(), kind: "hedge_checked", symbol: mandate.symbol, mandateId: mandate.id, headline: `Guard classified ${mandate.symbol} as ${observation.state}`, detail: `${observation.because} Coverage ${String(observation.coverageBps / 100)}%.`, evidence: null });
+    if (fp.isPositive(position.value.positionAmt)) return `Guard Mode ${mandate.id} is UNKNOWN for ${mandate.symbol}. An existing Futures long conflicts with the permitted protective short, so Telt will not act.`;
+    if (!fp.isZero(position.value.positionAmt) && !position.value.isolated) return `Guard Mode ${mandate.id} is UNKNOWN for ${mandate.symbol}. The existing Futures position uses cross margin, so Telt will not manage it.`;
+    const observation = classifyGuard({ spotQuantity: spot, futuresShortQuantity: fp.isNegative(position.value.positionAmt) ? fp.abs(position.value.positionAmt) : fp.parse("0"), targetCoverageBps: mandate.targetCoverageBps, toleranceBps: mandate.toleranceBps, maxAgeMs: 30_000, observedAt: account.value.observedAt, now, marketAvailable: true });
+    store.mandates.checkpointProtection(mandate.id, { at: now, state: observation.state });
+    store.mandates.journal({ at: now, kind: "hedge_checked", symbol: mandate.symbol, mandateId: mandate.id, headline: `Guard classified ${mandate.symbol} as ${observation.state}`, detail: `${observation.because} Coverage ${String(observation.coverageBps / 100)}%.`, evidence: null });
     return [`Guard Mode: ${observation.state.toUpperCase()}`, `Symbol: ${mandate.symbol}`, `Mandate: ${mandate.id} (version ${String(mandate.version)})`, `Coverage: ${String(observation.coverageBps / 100)}%`, `Target: ${String(mandate.targetCoverageBps / 100)}%`, `Reason: ${observation.because}`, "Every action is gated by the mandate, live execution flag, exchange filters and reconciliation."].join("\n");
   }
 

@@ -104,6 +104,8 @@ summary:focus-visible {
 .nav-links a {
   display: flex;
   align-items: center;
+  justify-content: center;
+  min-width: 44px;
   min-height: 44px;
 }
 .nav-links a:hover {
@@ -488,9 +490,11 @@ h3 {
   font-size: 13px;
 }
 .footer-links a {
+  min-width: 44px;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
 }
 .icon {
   width: 1.1em;

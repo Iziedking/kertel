@@ -2,7 +2,7 @@
   "name": "telt",
   "version": "0.1.0",
   "private": true,
-  "description": "Evidence-first Binance trading agent for Agent OS. Researches with bounded paid evidence, checks account and exchange rules, protects Spot holdings with isolated Futures hedges, and requires explicit confirmation before live execution.",
+  "description": "Autonomous position guardian for Binance Agent OS. Telt keeps an isolated Futures hedge aligned with a Spot holding under one bounded, revocable mandate.",
   "license": "MIT",
   "type": "module",
   "engines": {

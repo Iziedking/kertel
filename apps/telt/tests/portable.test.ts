@@ -105,7 +105,7 @@ function machine(exchange: ReturnType<typeof exchangeHolding>, dataDir: string) 
   let now = START;
   const runtime = createRuntime({
     config: loadConfig({
-      TELT_OWNER_WHATSAPP: "+2348067053854",
+      TELT_OWNER_WHATSAPP: "+12025550123",
       // Live mode downgrades to fixture without a research wallet, and the
       // write gate would then block every exit. Omitting this made the whole
       // suite quietly test the dry-run path.

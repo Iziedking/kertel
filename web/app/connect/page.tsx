@@ -12,8 +12,8 @@ export default function Connect() {
         </h1>
         <p className="lede">
           The website demo needs no account. It reads public Binance market
-          data and shows how Telt reasons. For a fuller conversation, connect
-          the same agent to ChatGPT or any MCP client.
+          data and shows how Telt reasons. Run the local MCP when you want Guard
+          Mode to use your own Binance Agent OS session.
         </p>
       </header>
 
@@ -51,14 +51,14 @@ export default function Connect() {
           <p>
             Start by asking: <strong>“What can Telt do?”</strong> With your own
             local account session, try:
-            <strong> “Protect all my SOL at 2x.”</strong> After confirmation,
-            ask: <strong>“Investigate my SOL protection and show its Memory Lane.”</strong>
+            <strong> “Guard my SOL at 100% coverage and 2x for 24 hours.”</strong>
+            Telt will explain the boundary and ask for one approval before it
+            arms the mandate.
           </p>
           <p className="notice">
-            The public MCP endpoint cannot use your Binance account. Live
-            protection runs through your local Telt process and your own
-            Binance Agent OS session. Never paste its token into this website
-            or a chat message.
+            The hosted MCP cannot use your Binance account. Live protection
+            runs through your local Telt process and your Binance Agent OS
+            session. Keep the token in the local environment.
           </p>
         </section>
 
@@ -83,21 +83,27 @@ node apps/telt/dist/serve.js`}</pre>
         </section>
 
         <section className="panel full-width">
-          <p className="eyebrow">WHAT HAPPENS NEXT</p>
-          <h3>A conversation with guardrails.</h3>
+          <p className="eyebrow">THE GUARD MODE LOOP</p>
+          <h3>Approve once, then inspect every change.</h3>
           <ol>
-            <li>Say which Spot holding to protect and how much coverage you want.</li>
-            <li>Telt reads the account and checks that the pair trades on both markets.</li>
-            <li>Review the Spot holding, target short, margin, leverage, and net exposure.</li>
-            <li>Type the one-use code only when those numbers are right.</li>
-            <li>Ask Telt to check both legs for free.</li>
-            <li>Ask for paid market context only when you want an investigation.</li>
-            <li>Read the Memory Lane, or ask Telt to remove the hedge.</li>
+            <li>State the pair, coverage, leverage, and how long the mandate should last.</li>
+            <li>Review the notional ceiling and approve Guard Mode once.</li>
+            <li>Telt reads Spot and Futures together and classifies the current coverage.</li>
+            <li>The daemon adjusts an isolated short only when the position leaves its tolerance band.</li>
+            <li>Each fill is checked against the expected Futures position before progress is recorded.</li>
+            <li>Ask “show my SOL Memory Lane” to inspect the decisions and exchange references.</li>
+            <li>Say “revoke SOL Guard Mode” to stop future adjustments. The existing hedge stays untouched.</li>
           </ol>
           <p>
-            Protection remains available even when a paid provider has no
-            coverage. Research explains the market and Memory Lane preserves
-            the account story. Neither can approve or place an order.
+            Paid research is optional. It explains market context and records
+            its cost, while the deterministic Guard controller decides whether
+            the hedge needs an adjustment.
+          </p>
+          <p className="notice">
+            The current controller polls every 30 seconds. Guard portfolio caps
+            cover active Guard symbols. Account-wide realised loss, event
+            streams, notifications, and automatic recovery of interrupted
+            orders remain roadmap work.
           </p>
         </section>
       </div>

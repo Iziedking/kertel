@@ -6,7 +6,7 @@ import Icon from "./Icon";
 
 // Carried over from the Telt brand: Fredoka for display, Hanken Grotesk for
 // body, Space Mono for anything a machine produced. The mono is doing real work
-// here — an attestation and a transaction hash have to read as machine-real,
+// here; an attestation and a transaction hash have to read as machine-real,
 // not as prose someone typed.
 const display = Fredoka({
   subsets: ["latin"],
@@ -22,7 +22,7 @@ const mono = Space_Mono({
 
 const TITLE = "Telt · Your Binance AI agent";
 const DESCRIPTION =
-  "An evidence-first Binance Agent OS agent that researches with bounded paid evidence, protects Spot holdings with isolated Futures hedges, and waits for explicit confirmation before live execution.";
+  "An autonomous position guardian built with Binance Agent OS. Telt monitors a Spot holding, maintains a bounded isolated Futures hedge, and records every adjustment.";
 
 export const metadata: Metadata = {
   title: TITLE,

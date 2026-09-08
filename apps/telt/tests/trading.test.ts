@@ -12,7 +12,7 @@ import type { Store } from "../src/infra/store.js";
 import { createRuntime } from "../src/runtime.js";
 
 const NOW = instant(Date.parse("2026-09-07T12:00:00.000Z"));
-const OWNER = "+2348067053854";
+const OWNER = "+12025550123";
 const KEY = `0x${"a".repeat(64)}`;
 const ETHUSDT = "ETHUSDT" as Symbol_;
 

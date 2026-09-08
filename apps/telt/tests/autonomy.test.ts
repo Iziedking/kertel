@@ -130,7 +130,7 @@ function build(exchange: ReturnType<typeof fakeExchange>, live = true) {
   let now = START;
   const runtime = createRuntime({
     config: loadConfig({
-      TELT_OWNER_WHATSAPP: "+2348067053854",
+      TELT_OWNER_WHATSAPP: "+12025550123",
       TELT_X402_PRIVATE_KEY: `0x${"a".repeat(64)}`,
       TELT_BINANCE_API_KEY: "k",
       TELT_BINANCE_API_SECRET: "s",
@@ -501,7 +501,7 @@ describe("when the monitor must stop itself", () => {
     const store = openStore(":memory:");
     const runtime = createRuntime({
       config: loadConfig({
-        TELT_OWNER_WHATSAPP: "+2348067053854",
+        TELT_OWNER_WHATSAPP: "+12025550123",
         TELT_BINANCE_API_KEY: "k",
         TELT_BINANCE_API_SECRET: "s",
         TELT_MODE: "live",

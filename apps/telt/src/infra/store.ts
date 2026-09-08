@@ -73,6 +73,8 @@ export type Store = {
   readonly mandates: MandateStore;
   readonly attestations: AttestationStore;
   readonly autonomy: AutonomyStore;
+  readonly setMonitorCheckpoint?: (input: { readonly running: boolean; readonly at: Instant; readonly result: string; readonly halted: string | null }) => void;
+  readonly monitorCheckpoint?: () => { readonly running: boolean; readonly at: Instant; readonly result: string; readonly halted: string | null } | null;
   close(): void;
 };
 
@@ -110,6 +112,11 @@ CREATE TABLE IF NOT EXISTS safety (
   cooldown_until INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS monitor_checkpoint (
+  id INTEGER PRIMARY KEY CHECK (id = 1), running INTEGER NOT NULL, at INTEGER NOT NULL,
+  result TEXT NOT NULL, halted TEXT
+);
+
 INSERT OR IGNORE INTO safety (id, kill_switch_engaged) VALUES (1, 0);
 `;
 
@@ -145,6 +152,13 @@ export function openStore(path: string): Store {
     mandates,
     attestations: attestationStore(db),
     autonomy: autonomyStore(db),
+    setMonitorCheckpoint(input) {
+      db.prepare("INSERT OR REPLACE INTO monitor_checkpoint (id, running, at, result, halted) VALUES (1, ?, ?, ?, ?)").run(input.running ? 1 : 0, input.at, input.result, input.halted);
+    },
+    monitorCheckpoint() {
+      const row = db.prepare("SELECT * FROM monitor_checkpoint WHERE id = 1").get() as Record<string, unknown> | undefined;
+      return row === undefined ? null : { running: Number(row["running"]) === 1, at: Number(row["at"]) as Instant, result: String(row["result"]), halted: row["halted"] === null ? null : String(row["halted"]) };
+    },
     spentOn(day: Instant): FixedPoint {
       const row = db
         .prepare("SELECT spent_atoms FROM spend_ledger WHERE utc_day = ?")

@@ -86,7 +86,7 @@ export function buildServer(runtime: Runtime): McpServer {
         "      Show both legs and wait for the code. It works for any USDT pair listed on both Spot",
         "      and USD-M Futures. Never claim a Spot-only token can be hedged by this version.",
         '- "how protected is my X" / "is my hedge balanced" -> telt_hedge_status.',
-        '- "guard my X" / "watch my X while I am away" -> ask for the user to approve Guard Mode once, then call telt_guard_arm. After arming, call telt_guard_status to show the deterministic state. Guard Mode is opt-in, versioned, expires, and can be revoked.',
+        '- "guard my X" / "watch my X while I am away" -> explain the coverage, leverage, cap and expiry, then ask the user to approve Guard Mode once. Call telt_guard_arm only after that approval. Call telt_guard_status next so the user sees the first deterministic state. Guard Mode is versioned, expires, and can be revoked.',
         '- "remove my X protection" / "unhedge X" -> telt_futures_close with the full fraction.',
         '- "how am I doing" / "what am I holding" / "any risks" / "should I worry"',
         "    -> telt_watch, then telt_positions. Lead with anything unprotected or near a stop.",
@@ -646,8 +646,9 @@ export function buildServer(runtime: Runtime): McpServer {
     {
       title: "Telt check positions",
       description:
-        "Run one pass over every armed plan right now: read the price, ratchet the stops, and act on " +
-        "anything that has come due. The monitor does this on a timer anyway; this forces it immediately.",
+        "Run one monitor pass now. Telt checks every Guard Mode mandate and exit plan, applies any " +
+        "permitted adjustment, and reports the result. Use this during a demo or when the user asks " +
+        "Telt to check protection immediately.",
       inputSchema: {},
     },
     async () =>
@@ -660,7 +661,7 @@ export function buildServer(runtime: Runtime): McpServer {
           );
         }
         if (result.checked === 0) {
-          return text("No armed plans to check.");
+          return text("No Guard Mode mandates or exit plans are armed.");
         }
         return text(
           [

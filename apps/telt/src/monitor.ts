@@ -53,6 +53,7 @@ export type MonitorDeps = {
   readonly newId: (prefix: string) => string;
   /** Optional Guard Mode pass. It is absent unless an explicit mandate exists. */
   readonly guardSweep?: () => Promise<readonly string[]>;
+  readonly checkpoint?: (input: { readonly running: boolean; readonly at: Instant; readonly result: string; readonly halted: string | null }) => void;
 };
 
 export type SweepResult = {
@@ -82,31 +83,37 @@ export function sweep(deps: MonitorDeps): Promise<SweepResult> {
 async function performSweep(deps: MonitorDeps): Promise<SweepResult> {
   const now = deps.now();
   const lines: string[] = [];
+  let guardChecked = 0;
+
+  const runningState = (): boolean =>
+    deps.store.monitorCheckpoint?.()?.running ?? false;
+  const haltIfUnsafe = (): SweepResult | null => {
+    const safety = deps.store.safetyState();
+    const halted = safety.killSwitchEngaged
+      ? `Telt is stopped: ${safety.killSwitchReason ?? "no reason recorded"}.`
+      : safety.unreconciledOperations.length > 0
+        ? `An earlier order is unresolved (${safety.unreconciledOperations.join(", ")}). Reconcile before the monitor runs again.`
+        : null;
+    if (halted === null) return null;
+    deps.checkpoint?.({ running: runningState(), at: now, result: "halted", halted });
+    return { checked: guardChecked, fired: 0, halted, lines };
+  };
+
+  // The kill switch and unresolved-order gate must run before Guard Mode. A
+  // controller that trades first and checks the stop state second has no stop.
+  const initialHalt = haltIfUnsafe();
+  if (initialHalt !== null) return initialHalt;
 
   if (deps.guardSweep !== undefined) {
     const guardLines = await deps.guardSweep();
     lines.push(...guardLines);
+    guardChecked = guardLines.length;
   }
 
-  const safety = deps.store.safetyState();
-  if (safety.killSwitchEngaged) {
-    return {
-      checked: 0,
-      fired: 0,
-      halted: `Telt is stopped: ${safety.killSwitchReason ?? "no reason recorded"}.`,
-      lines: [],
-    };
-  }
-  if (safety.unreconciledOperations.length > 0) {
-    // An order in flight means the position size is unknown, and a mandate
-    // acting on an unknown position can sell what it does not have.
-    return {
-      checked: 0,
-      fired: 0,
-      halted: `An earlier order is unresolved (${safety.unreconciledOperations.join(", ")}). Reconcile before the monitor runs again.`,
-      lines: [],
-    };
-  }
+  // Guard Mode can engage the kill switch after an uncertain or partial fill.
+  // Stop here so no exit mandate runs against that newly uncertain position.
+  const guardHalt = haltIfUnsafe();
+  if (guardHalt !== null) return guardHalt;
 
   // Answer the questions that could not be answered when they were asked.
   // Retrospective checks run after active protection.
@@ -114,7 +121,8 @@ async function performSweep(deps: MonitorDeps): Promise<SweepResult> {
   const mandates = deps.store.mandates.active();
   if (mandates.length === 0) {
     await settleOldVerdicts(deps, now);
-    return { checked: 0, fired: 0, halted: null, lines };
+    deps.checkpoint?.({ running: runningState(), at: now, result: "idle", halted: null });
+    return { checked: guardChecked, fired: 0, halted: null, lines };
   }
 
   let fired = 0;
@@ -127,7 +135,9 @@ async function performSweep(deps: MonitorDeps): Promise<SweepResult> {
   }
 
   await settleOldVerdicts(deps, deps.now());
-  return { checked: mandates.length, fired, halted: null, lines };
+  const checked = mandates.length + guardChecked;
+  deps.checkpoint?.({ running: runningState(), at: deps.now(), result: `checked:${String(checked)} fired:${String(fired)}`, halted: null });
+  return { checked, fired, halted: null, lines };
 }
 
 /** A day. Long enough for a dip to resolve, short enough to still be about that exit. */
@@ -505,6 +515,7 @@ export function createMonitor(deps: MonitorDeps, intervalMs: number): Monitor {
       }
       timer = setInterval(() => void tick(), intervalMs);
       timer.unref();
+      deps.checkpoint?.({ running: true, at: deps.now(), result: "started", halted: null });
       deps.log.info("monitor started", { intervalMs });
     },
     stop() {
@@ -512,6 +523,7 @@ export function createMonitor(deps: MonitorDeps, intervalMs: number): Monitor {
         clearInterval(timer);
         timer = null;
       }
+      deps.checkpoint?.({ running: false, at: deps.now(), result: "stopped", halted: null });
     },
     get running() {
       return timer !== null;

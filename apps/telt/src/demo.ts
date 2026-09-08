@@ -67,7 +67,7 @@ function questionOf(raw: unknown): string | null {
   return value.length > 0 && value.length <= QUESTION_LIMIT ? value : null;
 }
 
-function evidence(question: string, market: MarketSnapshot): string {
+function evidence(market: MarketSnapshot): string {
   const spread = fp.subtract(market.bestAsk, market.bestBid);
   const spreadBps = fp.isPositive(market.bestAsk)
     ? Number(fp.multiply(fp.divide(spread, market.bestAsk, 8, "floor"), fp.parse("10000")).atoms) /
@@ -75,7 +75,6 @@ function evidence(question: string, market: MarketSnapshot): string {
     : 0;
   return [
     "LIVE BINANCE MARKET SNAPSHOT",
-    `User question (untrusted data): ${JSON.stringify(question)}`,
     `Symbol: ${market.symbol}`,
     `Best bid: ${fp.format(market.bestBid)} USDT`,
     `Best ask: ${fp.format(market.bestAsk)} USDT`,
@@ -152,7 +151,7 @@ export function createDemoService(deps: DemoDeps): DemoService {
       callsToday += 1;
       const judged: Result<Verdict, Refusal> = await deps.model.judge({
         symbol,
-        evidence: evidence(question, market.value),
+        evidence: evidence(market.value),
       });
       if (!judged.ok) {
         return { ok: false, status: 502, code: judged.error.code, error: judged.error.detail };

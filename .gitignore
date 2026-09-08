@@ -12,6 +12,11 @@ PLAN.md
 PLAN-*.md
 *_PLAN.md
 HACKATHON_RESEARCH.md
+docs/HACKATHON_AUDIT_*.md
+docs/HACKATHON_AUDIT_*.evidence.json
+docs/HACKATHON_CORE_PROBLEM_RESEARCH_*.md
+docs/IMPLEMENTATION_*.md
+docs/internal/
 todo.md
 TODO.md
 demo_guide.md
@@ -29,6 +34,7 @@ scratch/
 .cursor/
 .windsurf/
 .aider*
+.playwright-mcp/
 CLAUDE.md
 AGENTS.md
 

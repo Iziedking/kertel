@@ -21,16 +21,16 @@ export default function Home() {
             </span>
           </h1>
           <p className="lede">
-            Telt reads your Binance Spot holding, calculates a matching isolated
-            Futures hedge, and waits for your approval before it acts. Optional
-            paid research explains the position without controlling it.
+            Approve one bounded mandate. Telt watches the Spot holding, keeps an
+            isolated Futures hedge inside your limits, records each adjustment,
+            and stops when it cannot prove the account state.
           </p>
           <div className="actions">
             <Link href="#demo" className="button primary">
               Try the public agent <Icon name="arrow" />
             </Link>
             <Link href="/connect" className="button secondary">
-              Connect via MCP
+              Run Guard Mode
             </Link>
           </div>
           <p className="micro">
@@ -41,32 +41,32 @@ export default function Home() {
           className="hero-art"
           aria-label="Telt workflow: read a holding, calculate protection, approve"
         >
-          <div className="orbit-label">PROTECTION, EXPLAINED</div>
+          <div className="orbit-label">GUARD MODE / ONE APPROVAL</div>
           <div className="signal-card signal-one">
-            <span className="mono">01 / READ</span>
-            <strong>Your real Spot holding.</strong>
+            <span className="mono">01 / OBSERVE</span>
+            <strong>Read both Binance legs.</strong>
             <span className="spark" aria-hidden="true">
               ▁▂▂▅▃▅▇▆█
             </span>
           </div>
           <div className="signal-card signal-two">
-            <span className="mono">02 / MATCH</span>
-            <strong>Size the Futures short.</strong>
+            <span className="mono">02 / PROTECT</span>
+            <strong>Keep coverage in range.</strong>
             <div className="mini-tags">
-              <span>Spot balance</span>
-              <span>Exchange limits</span>
+              <span>Mandate limits</span>
+              <span>Isolated margin</span>
             </div>
           </div>
           <div className="signal-card signal-three">
-            <span className="mono">03 / APPROVE</span>
+            <span className="mono">03 / PROVE</span>
             <strong>
-              Both legs.
-              <br />One clear code.
+              Verify the fill.
+              <br />Record the reason.
             </strong>
             <span className="round-arrow" aria-hidden="true"><Icon name="arrow" /></span>
           </div>
           <div className="art-caption">
-            Ask later: “How protected am I?”
+            Ask anytime: “What changed?”
           </div>
         </div>
       </div>
@@ -79,7 +79,7 @@ export default function Home() {
             <b>MCP</b> · plain-language control
           </span>
           <span>
-            <b>Isolated Futures</b> · one-symbol hedge
+            <b>Guard Mode</b> · bounded position care
           </span>
           <span>
             <b>Memory Lane</b> · every protection event
@@ -106,47 +106,48 @@ export default function Home() {
       <section className="wrap section" id="workflow">
         <div className="section-top">
           <div>
-            <p className="eyebrow">ONE REQUEST. BOTH SIDES.</p>
-            <h2>A hedge you can understand.</h2>
+            <p className="eyebrow">ONE APPROVAL. CONTINUOUS CHECKS.</p>
+            <h2>Protection that follows the position.</h2>
           </div>
           <p className="section-intro">
-            Say what you want protected. Telt turns that intent into a bounded,
-            reviewable action on Binance.
+            Spot balances change after a hedge opens. Telt detects the drift and
+            adjusts only within the mandate you approved.
           </p>
         </div>
         <div className="three-grid">
           <article className="feature-card mint">
-            <span className="card-index">01 / READ THE EXPOSURE</span>
+            <span className="card-index">01 / APPROVE THE BOUNDARY</span>
             <div className="feature-icon" aria-hidden="true">
               <Icon name="orbit" />
             </div>
-            <h3>Start from what you hold.</h3>
+            <h3>Set the rules once.</h3>
             <p>
-              Telt reads the actual Spot balance, including locked assets, and
-              confirms that a matching USD-M Futures market exists.
+              Choose the pair, target coverage, leverage, and expiry. Review
+              the operator-set cap, then approve a versioned, revocable mandate.
             </p>
           </article>
           <article className="feature-card lavender">
-            <span className="card-index">02 / CALCULATE THE HEDGE</span>
+            <span className="card-index">02 / DETECT THE DRIFT</span>
             <div className="feature-icon" aria-hidden="true">
               <Icon name="waves" />
             </div>
-            <h3>See the protection before it exists.</h3>
+            <h3>Watch Spot and Futures together.</h3>
             <p>
-              Review coverage, short quantity, position value, isolated
-              leverage, required margin, available Futures cash, and limits.
+              Each sweep classifies the position as protected, underhedged,
+              overhedged, unprotected, or unknown. Tolerance and cooldown rules
+              prevent small repeated orders.
             </p>
           </article>
           <article className="feature-card sand">
-            <span className="card-index">03 / WATCH AND REMEMBER</span>
+            <span className="card-index">03 / ADJUST AND VERIFY</span>
             <div className="feature-icon" aria-hidden="true">
               <Icon name="arrow" />
             </div>
-            <h3>Keep the whole position in view.</h3>
+            <h3>Prove the new state.</h3>
             <p>
-              After your one-use confirmation, Protection Watch checks both
-              legs for free. Ask for paid context only when you need it. Memory
-              Lane records the story through the reduce-only close.
+              Telt uses Futures lot and notional filters, checks Guard portfolio
+              caps, writes the operation before sending it, verifies the fill,
+              and stops on an unresolved result. Memory Lane keeps the record.
             </p>
           </article>
         </div>
@@ -155,39 +156,39 @@ export default function Home() {
         <div className="section-top">
           <div>
             <p className="eyebrow">CAPABILITY MAP</p>
-            <h2>Live now. Next by design.</h2>
+            <h2>Built now. Roadmap stated plainly.</h2>
           </div>
           <p className="section-intro">
-            The demo shows a real account workflow with clear boundaries. The
-            roadmap names the accounting and continuity work still ahead.
+            The account workflow runs through the user&apos;s local Agent OS
+            session. The public demo has market access and no trading authority.
           </p>
         </div>
         <div className="three-grid">
           <article className="feature-card mint">
-            <span className="card-index">LIVE / ACCOUNT PATH</span>
-            <h3>Protect a Binance Spot holding.</h3>
+            <span className="card-index">BUILT / GUARD LOOP</span>
+            <h3>Maintain a bounded hedge.</h3>
             <p>
-              Telt reads the balance, validates the matching USDT markets,
-              sizes a short, checks margin and filters, then waits for your
-              one-use confirmation before opening the Futures leg.
+              Guard Mode can open, increase, or reduce one matching isolated
+              USD-M Futures hedge. Every adjustment needs fresh account reads,
+              complete Guard portfolio accounting, and the live execution gate.
             </p>
           </article>
           <article className="feature-card lavender">
-            <span className="card-index">LIVE / EVIDENCE PATH</span>
-            <h3>Research when the question earns it.</h3>
+            <span className="card-index">BUILT / MEMORY LANE</span>
+            <h3>Keep the decision record.</h3>
             <p>
-              Binance market data is free. Paid research runs only on request,
-              respects per-call and daily caps, and stays explanatory. A
-              missing provider mapping leaves the account check usable.
+              Telt records proposals, classifications, adjustments, failures,
+              paid investigations, and revocation. Research can explain market
+              context, but it cannot authorize or block protection.
             </p>
           </article>
           <article className="feature-card sand">
-            <span className="card-index">NEXT / ACCOUNTING PATH</span>
-            <h3>Broaden protection with proof.</h3>
+            <span className="card-index">ROADMAP / OPERATIONS</span>
+            <h3>Close the remaining gaps.</h3>
             <p>
-              Portfolio-wide exposure, restart-safe watch state, transition
-              alerts, and wider provider coverage come after the current
-              one-symbol path has the accounting to support them.
+              WebSocket event intake, full-account risk discovery, automatic
+              reconciliation of interrupted orders, and notifications are the
+              next operating milestones.
             </p>
           </article>
         </div>

@@ -5,7 +5,7 @@ import * as fp from "@telt/core/money";
 import { ConfigError, loadConfig, railsFor } from "../src/infra/config.js";
 
 const KEY = `0x${"a".repeat(64)}`;
-const OWNER = "+2348067053854";
+const OWNER = "+12025550123";
 const BINANCE = { TELT_BINANCE_API_KEY: "binance-key", TELT_BINANCE_API_SECRET: "binance-secret" };
 
 function env(overrides: Record<string, string | undefined> = {}): Record<string, string | undefined> {
@@ -180,8 +180,8 @@ describe("rail preference", () => {
 
 describe("the sender salt", () => {
   it("differs per owner, so two deployments cannot be cross-referenced by hash", () => {
-    const first = loadConfig(env({ TELT_OWNER_WHATSAPP: "+2348067053854" }));
-    const second = loadConfig(env({ TELT_OWNER_WHATSAPP: "+2348130118673" }));
+    const first = loadConfig(env({ TELT_OWNER_WHATSAPP: "+12025550123" }));
+    const second = loadConfig(env({ TELT_OWNER_WHATSAPP: "+12025550124" }));
     expect(first.senderSalt).not.toBe(second.senderSalt);
   });
 });

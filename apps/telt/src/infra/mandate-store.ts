@@ -53,6 +53,21 @@ export type ProtectionMandate = {
   readonly lastState: string | null;
 };
 
+export type GuardOperation = {
+  readonly id: string;
+  readonly mandateId: string;
+  readonly symbol: string;
+  readonly idempotencyKey: string;
+  readonly clientOrderId: string;
+  readonly action: "increase" | "reduce";
+  readonly quantity: string;
+  readonly status: "planned" | "submitted" | "filled" | "rejected" | "partial" | "unknown";
+  readonly orderRef: string | null;
+  readonly filledQuantity: string;
+  readonly createdAt: Instant;
+  readonly updatedAt: Instant;
+};
+
 export type JournalEntry = {
   readonly at: Instant;
   readonly kind: JournalKind;
@@ -115,10 +130,14 @@ export type MandateStore = {
   forgetAdopted(symbol: string): void;
 
   saveProtection(mandate: ProtectionMandate): void;
-  activeProtection(symbol?: string): ProtectionMandate | null;
+  activeProtection(symbol?: string, now?: Instant): ProtectionMandate | null;
   allProtection(): readonly ProtectionMandate[];
   revokeProtection(id: string, at: Instant): void;
   checkpointProtection(id: string, input: { readonly at: Instant; readonly state: string; readonly actionAt?: Instant | null }): void;
+  claimGuardOperation(operation: GuardOperation): boolean;
+  findGuardOperation(idempotencyKey: string): GuardOperation | null;
+  updateGuardOperation(id: string, input: { readonly status: GuardOperation["status"]; readonly orderRef?: string | null; readonly filledQuantity?: string; readonly at: Instant }): void;
+  unresolvedGuardOperations(): readonly GuardOperation[];
 
   learn(lesson: Lesson): void;
   lessonsFor(symbol: string): readonly Lesson[];
@@ -195,6 +214,23 @@ function toProtection(row: Record<string, unknown>): ProtectionMandate {
   };
 }
 
+function toGuardOperation(row: Record<string, unknown>): GuardOperation {
+  return {
+    id: String(row["id"]),
+    mandateId: String(row["mandate_id"]),
+    symbol: String(row["symbol"]),
+    idempotencyKey: String(row["idempotency_key"]),
+    clientOrderId: String(row["client_order_id"]),
+    action: String(row["action"]) as GuardOperation["action"],
+    quantity: String(row["quantity"]),
+    status: String(row["status"]) as GuardOperation["status"],
+    orderRef: row["order_ref"] === null ? null : String(row["order_ref"]),
+    filledQuantity: String(row["filled_quantity"]),
+    createdAt: Number(row["created_at"]) as Instant,
+    updatedAt: Number(row["updated_at"]) as Instant,
+  };
+}
+
 export function mandateStore(db: DatabaseSync): MandateStore {
   db.exec(`CREATE TABLE IF NOT EXISTS protection_mandates (
     id TEXT PRIMARY KEY, symbol TEXT NOT NULL, target_coverage_bps INTEGER NOT NULL,
@@ -202,7 +238,16 @@ export function mandateStore(db: DatabaseSync): MandateStore {
     max_adjustment_bps INTEGER NOT NULL, version INTEGER NOT NULL, created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL, cooldown_ms INTEGER NOT NULL, status TEXT NOT NULL,
     last_action_at INTEGER, checkpoint_at INTEGER, last_state TEXT
-  ); CREATE INDEX IF NOT EXISTS protection_mandates_active ON protection_mandates(status, symbol);`);
+  );
+  CREATE INDEX IF NOT EXISTS protection_mandates_active ON protection_mandates(status, symbol);
+  CREATE TABLE IF NOT EXISTS guard_operations (
+    id TEXT PRIMARY KEY, mandate_id TEXT NOT NULL, symbol TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE, client_order_id TEXT NOT NULL,
+    action TEXT NOT NULL, quantity TEXT NOT NULL, status TEXT NOT NULL,
+    order_ref TEXT, filled_quantity TEXT NOT NULL, created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS guard_operations_status ON guard_operations(status);`);
   return {
     save(mandate, lastSeenPrice, lastCheckedAt, codeHash = null) {
       db.prepare(
@@ -444,9 +489,9 @@ export function mandateStore(db: DatabaseSync): MandateStore {
           mandate.lastActionAt, mandate.checkpointAt, mandate.lastState);
     },
 
-    activeProtection(symbol) {
+    activeProtection(symbol, now) {
       const row = db.prepare("SELECT * FROM protection_mandates WHERE status = 'active' AND expires_at > ? AND (? IS NULL OR symbol = ?) ORDER BY created_at DESC LIMIT 1")
-        .get(Date.now(), symbol ?? null, symbol ?? null) as Record<string, unknown> | undefined;
+        .get(now ?? Date.now(), symbol ?? null, symbol ?? null) as Record<string, unknown> | undefined;
       return row === undefined ? null : toProtection(row);
     },
 
@@ -461,6 +506,45 @@ export function mandateStore(db: DatabaseSync): MandateStore {
 
     checkpointProtection(id, input) {
       db.prepare("UPDATE protection_mandates SET checkpoint_at = ?, last_state = ?, last_action_at = COALESCE(?, last_action_at) WHERE id = ? AND status = 'active'").run(input.at, input.state, input.actionAt ?? null, id);
+    },
+
+    claimGuardOperation(operation) {
+      try {
+        db.prepare(`INSERT INTO guard_operations
+          (id, mandate_id, symbol, idempotency_key, client_order_id, action,
+           quantity, status, order_ref, filled_quantity, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            operation.id, operation.mandateId, operation.symbol,
+            operation.idempotencyKey, operation.clientOrderId, operation.action,
+            operation.quantity, operation.status, operation.orderRef,
+            operation.filledQuantity, operation.createdAt, operation.updatedAt,
+          );
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    findGuardOperation(idempotencyKey) {
+      const row = db.prepare("SELECT * FROM guard_operations WHERE idempotency_key = ?")
+        .get(idempotencyKey) as Record<string, unknown> | undefined;
+      return row === undefined ? null : toGuardOperation(row);
+    },
+
+    updateGuardOperation(id, input) {
+      db.prepare(`UPDATE guard_operations
+        SET status = ?, order_ref = COALESCE(?, order_ref),
+            filled_quantity = COALESCE(?, filled_quantity), updated_at = ?
+        WHERE id = ?`).run(
+          input.status, input.orderRef ?? null, input.filledQuantity ?? null,
+          input.at, id,
+        );
+    },
+
+    unresolvedGuardOperations() {
+      const rows = db.prepare("SELECT * FROM guard_operations WHERE status IN ('planned', 'submitted', 'partial', 'unknown') ORDER BY created_at ASC")
+        .all() as readonly Record<string, unknown>[];
+      return rows.map(toGuardOperation);
     },
 
     learn(lesson) {

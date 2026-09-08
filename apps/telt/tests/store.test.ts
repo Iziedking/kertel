@@ -140,3 +140,12 @@ describe("the kill switch", () => {
     store.close();
   });
 });
+
+describe("the monitor checkpoint", () => {
+  it("persists the last daemon state", () => {
+    const store = openStore(":memory:");
+    store.setMonitorCheckpoint?.({ running: true, at: DAY_ONE, result: "checked:1 fired:0", halted: null });
+    expect(store.monitorCheckpoint?.()).toEqual({ running: true, at: DAY_ONE, result: "checked:1 fired:0", halted: null });
+    store.close();
+  });
+});

@@ -46,7 +46,7 @@ const integer = z.string().trim().regex(/^\d+$/, "must be a whole number");
 const e164 = z
   .string()
   .trim()
-  .regex(/^\+[1-9]\d{6,14}$/, "must be an E.164 phone number, for example +2348012345678");
+  .regex(/^\+[1-9]\d{6,14}$/, "must be an E.164 phone number, for example +12025550123");
 
 /** 0x-prefixed 32-byte hex. Checked for shape only; never logged. */
 const privateKey = z
@@ -107,6 +107,9 @@ export type TeltConfig = {
    * not bound this risk.
    */
   readonly maxFuturesNotional: FixedPoint;
+  /** Aggregate ceilings across every symbol visible to the local watcher. */
+  readonly maxTotalExposure: FixedPoint;
+  readonly maxTotalHedgeNotional: FixedPoint;
   readonly model: string | null;
   /**
    * The key for Telt's own reasoning layer.
@@ -270,6 +273,8 @@ export function loadConfig(env: Env): TeltConfig {
     setting(env, "MAX_FUTURES_NOTIONAL"),
     decimal,
   ) as string | null;
+  const maxTotalExposureRaw = parseOr("TELT_MAX_TOTAL_EXPOSURE", setting(env, "MAX_TOTAL_EXPOSURE"), decimal) as string | null;
+  const maxTotalHedgeRaw = parseOr("TELT_MAX_TOTAL_HEDGE_NOTIONAL", setting(env, "MAX_TOTAL_HEDGE_NOTIONAL"), decimal) as string | null;
 
   const base = defaultPolicy();
 
@@ -384,6 +389,8 @@ export function loadConfig(env: Env): TeltConfig {
     binanceApiSecret: binanceSecret,
     maxLeverage,
     maxFuturesNotional: fp.parse(maxFuturesRaw ?? "50.00"),
+    maxTotalExposure: fp.parse(maxTotalExposureRaw ?? maxFuturesRaw ?? "50.00"),
+    maxTotalHedgeNotional: fp.parse(maxTotalHedgeRaw ?? maxFuturesRaw ?? "50.00"),
     model: setting(env, "MODEL"),
     // Not TELT_-prefixed: it is Anthropic's own conventional name, and an
     // operator who already has it exported should not have to copy it.

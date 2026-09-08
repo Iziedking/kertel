@@ -1,141 +1,218 @@
 # Telt
 
-Autonomous position protection for Binance Agent OS. Telt watches a Spot holding against an isolated USD-M Futures hedge, records every decision, and stops when account state is stale or uncertain.
+Telt is an autonomous position guardian built with Binance Agent OS.
 
-- [Run the live demo](https://telt.site/#demo)
-- [Connect an MCP client](https://telt.site/connect)
-- [Verify a receipt](https://telt.site/verify)
+A Spot hedge becomes stale when the holding changes after the trader walks away. Telt solves that specific problem. The trader approves a bounded Guard Mode mandate once, then Telt watches the Spot holding and its isolated USD-M Futures hedge, adjusts the short when coverage drifts, verifies the resulting position, and records the decision in Memory Lane.
 
-## Start here
+[Try the public agent](https://telt.site/#demo) | [Connect an MCP client](https://telt.site/connect) | [Verify a receipt](https://telt.site/verify)
 
-The public demo requires no account. Ask a market question and Telt will read a live public Binance quote, send bounded evidence through its server-side Claude review, and return:
+## The problem
 
-- the Binance observation time
-- a structured verdict
-- evidence gaps and research limits
-- a clear no-order boundary
+Most trading assistants answer questions or place a requested order. They stop when the chat stops.
 
-The browser receives no provider key, account credential, research wallet, or order capability.
+A hedge needs care after it opens. Buying more Spot creates an underhedged position. Selling Spot can leave the account overhedged. A dropped connection can leave an order outcome unknown. The trader must keep checking both markets or accept that the protection may no longer match the position.
 
-For the full agent workflow, connect ChatGPT, Codex, Claude, or another MCP client to `https://mcp.telt.site/mcp`. Ask in plain language: “protect my SOL,” “check my protection,” or “show my Memory Lane.”
+Telt turns that ongoing job into one inspectable mandate.
 
-The public site and hosted MCP endpoint cannot access a user's Binance account. Live account actions run from a local Telt MCP process connected to that user's Binance Agent OS session.
+> Approve the limits once. Telt keeps the hedge inside them and stops when it cannot prove the account state.
 
-## Live capabilities
+## The Guard Mode loop
 
-- Spot market orders with exchange filters, balance checks, slippage bounds, one-use confirmation codes, and reconciliation.
-- Agent OS USDⓈ-M Futures positions with isolated margin, a configured margin multiplier ceiling, and reduce-only closes.
-- One-symbol protection for any USDT pair listed on both Spot and USD-M Futures. Telt refuses Spot-only pairs and conflicting existing Futures positions.
-- Protection Watch, which checks both legs for free. An explicit investigation buys paid research and attaches it as context without giving research authority over the hedge.
-- Guard Mode, an explicit, versioned mandate that survives restarts, expires automatically, records checkpoints, and classifies exposure as protected, underhedged, overhedged, unprotected, or unknown.
-- Memory Lane, which records proposals, openings, checks, investigations, and removals for the next session.
-- Approved exit plans that can scale out, ratchet stops, and halt on unknown or incomplete fills.
+1. The trader names a USDT pair, target coverage, margin multiple, and expiry. Telt shows the operator-set notional caps before approval.
+2. Telt stores a versioned mandate. The mandate can be inspected or revoked at any time.
+3. The local daemon reads the real Spot balance and matching USD-M Futures position through Binance Agent OS.
+4. A deterministic controller classifies the position as `protected`, `underhedged`, `overhedged`, `unprotected`, or `unknown`.
+5. Telt applies the Futures lot size, minimum position value, cooldown, per-position cap, and Guard portfolio caps.
+6. It writes a durable operation before sending an adjustment. Increases use an isolated short. Reductions use a reduce-only order.
+7. Telt checks the final Futures quantity against the expected position. Partial, unknown, conflicting, or stale states engage the kill switch.
+8. Memory Lane records the mandate, checks, adjustments, paid investigations, failures, and revocation.
 
-## How it works
+The model explains what happened. It does not decide whether protection is required and cannot override the controller.
 
-1. Say what to protect, for example “guard my SOL at 2x while I am away.”
-2. Telt verifies that `SOLUSDT` trades on both Binance Spot and USD-M Futures, then reads the actual SOL balance.
-3. It calculates the short quantity from the requested coverage and checks the Futures lot size, minimum position value, Telt's cap, leverage ceiling, and available USDT margin.
-4. It shows the Spot holding, target short, resulting net exposure, required margin, and available Futures cash. No account setting or order changes at this point.
-5. A human types the one-use code. Telt rechecks the position and price, forces isolated margin, sets the approved leverage, and opens the short.
-6. Ask “check my SOL protection” to read both legs as one position for free. Ask “investigate my SOL protection” when you want Telt to spend research points on outside market context.
-7. For unattended protection, approve Guard Mode once with `telt_guard_arm`. Telt stores the mandate, runs it from the local daemon, and exposes `telt_guard_status` and `telt_guard_revoke` for inspection and control.
-8. Ask for the SOL Memory Lane to see the proposal, opening, checks, investigations, and removal in time order. Ask “remove my SOL protection” to close the Futures leg with a reduce-only order.
-
-This path is generic. It supports any `...USDT` asset that Binance currently lists on both Spot and USD-M Futures. BTC, ETH, BNB, and SOL are examples, not a hardcoded allowlist. A Spot-only token cannot use this hedge path.
-
-Protection Watch starts with Binance account facts and spends nothing. Paid research runs only when the user asks Telt to investigate the protected position. It explains market context, but it never opens, resizes, closes, delays, or vetoes the hedge. Missing provider coverage therefore leaves the protection workflow intact.
-
-Memory Lane turns the audit journal into one readable position story. Telt records each protection proposal, confirmation, account check, paid investigation, and removal locally. An MCP client with Agent Memory can store that lane so it follows the user across sessions without giving Telt the memory credential.
-
-An explicitly requested order may omit research. Its receipt records that choice. A pre-send quote check cannot guarantee the fill price of a market order.
-
-## Connect an MCP client
-
-Use the hosted endpoint for a quick demo:
-
+```mermaid
+flowchart LR
+    U[Trader in ChatGPT or Codex] --> M[Telt MCP]
+    M --> D[Versioned Guard mandate]
+    D --> W[30 second local monitor]
+    W --> A[Binance Agent OS]
+    A --> S[Spot balance]
+    A --> F[USD-M Futures position]
+    S --> C[Deterministic coverage controller]
+    F --> C
+    C --> O[Durable adjustment record]
+    O --> A
+    A --> R[Final position check]
+    R --> L[Memory Lane]
+    R --> K[Kill switch on uncertainty]
 ```
+
+## Why Binance Agent OS matters
+
+Agent OS is the account and execution layer. The local Telt process uses the trader's own Agent OS session to read Spot balances, inspect USD-M Futures positions, change the permitted hedge, and verify the result. Account credentials stay in the user's environment.
+
+The hosted MCP endpoint and public website have no Binance account access. They are safe surfaces for judges to inspect the agent without receiving the operator's token.
+
+## What is built
+
+| Capability | Current behavior |
+| --- | --- |
+| Guard Mode | Stores a versioned mandate with target coverage, tolerance, cap, margin multiple, cooldown, and expiry |
+| Position monitoring | Runs in the local daemon every 30 seconds and can be forced with `telt_check_positions` |
+| Automatic adjustment | Opens, increases, or reduces the permitted isolated Futures short when coverage leaves the tolerance band |
+| Exchange rules | Applies the live Futures quantity step, minimum quantity, maximum quantity, and minimum position value |
+| Risk gates | Enforces a per-hedge ceiling plus aggregate Spot and hedge ceilings across active Guard symbols |
+| Durable execution | Records the adjustment before sending it and uses a deterministic Binance client order ID |
+| Fill verification | Compares the live position after an order with the exact quantity Telt expected |
+| Restart safety | Mandates, monitor checkpoints, kill-switch state, and adjustment records survive restarts. An interrupted adjustment halts the next runtime for reconciliation |
+| Manual hedge flow | Builds a reviewable Spot-to-Futures hedge proposal and requires a one-use confirmation code |
+| Protection Watch | Reads both legs for free and reports current coverage, net exposure, and Futures PnL |
+| Memory Lane | Renders the protection lifecycle from the durable local journal |
+| Paid research | Buys outside context only when requested, records the cost, and never controls the hedge |
+| Public demo | Reads a live public Binance market snapshot and returns a checked Claude verdict without account or order access |
+| Receipt verifier | Checks the EIP-191 signature over displayed claims in the browser and states what the signature does not prove |
+
+Telt supports a token when the same USDT pair is trading on Binance Spot and USD-M Futures. BTC, ETH, BNB, and SOL use the same path. Spot-only assets are refused.
+
+## Use Telt conversationally
+
+Connect a local MCP client and speak normally:
+
+```text
+Guard my SOL at 100% coverage and 2x for the next 24 hours.
+Check my protection now.
+Why did Telt adjust the hedge?
+Investigate the SOL market and add the result to my Memory Lane.
+Show my SOL Memory Lane.
+Revoke SOL Guard Mode.
+```
+
+The MCP instructions map those requests to the correct tools. Read-only checks run without extra confirmation. Telt explains the mandate boundary before `telt_guard_arm`, and that call requires the user's approval. Manual Spot and Futures entries still use one-use confirmation codes.
+
+### Hosted MCP
+
+Use this endpoint to inspect Telt without account access:
+
+```text
 https://mcp.telt.site/mcp
 ```
 
-1. Copy the endpoint.
-2. In ChatGPT or another compatible client, choose **Add remote MCP server**.
-3. Paste the endpoint and start a conversation.
+The hosted service can answer public market questions. It cannot see or trade a user's Binance account.
 
-Try one of these prompts:
+### Local MCP with Agent OS
 
-- “Protect all my SOL holding at 2x.”
-- “Check my SOL protection.”
-- “Investigate my SOL protection and show its Memory Lane.”
-- “Remove my BNB protection.”
-- “Check ETH market conditions before I decide what to do.”
-
-The public demo and hosted MCP surface are designed for inspection without account access. Binance account actions require a local runtime with the required credentials and explicit live-execution settings.
-
-For a local MCP server, use the command `node` with the argument `/absolute/path/to/kertel/apps/telt/dist/mcp.js`. Start in fixture mode with `TELT_MODE=fixture` and set `TELT_OWNER_WHATSAPP` to the owner number. The full walkthrough is at [telt.site/connect](https://telt.site/connect).
-
-Configure `TELT_BINANCE_MCP_TOKEN` in the local runtime for Binance Agent OS account access. Optional paid research uses `TELT_X402_PRIVATE_KEY`. See [.env.example](.env.example), and keep credentials out of browser forms, screenshots, and public chat.
-
-For connected account workflows, the MCP client supplies the model reasoning. Telt's separate autonomous hunting workflow uses its own Anthropic configuration. Discretionary live entries remain paused until account-wide risk accounting is complete.
-
-Live execution requires both `TELT_MODE=live` and `TELT_LIVE_EXECUTION=true`. These settings do not approve an individual order. Do not enable live execution for a demonstration.
-
-## Verify receipts
-
-The browser verifier runs locally. It recovers the EIP-191 signer over the canonical attestation and compares it with the claimed address. The verifier does not ask Telt's server to judge its own receipt.
-
-| Check | Scope |
-| --- | --- |
-| Signature | Integrity of signed fields relative to the claimed address, not identity or truth |
-| V2 linkage | The research run, decision digest, and proposal hash are included in the signed claims |
-| Payment | A reference to inspect; the offline verifier does not check settlement |
-| Evidence digest | A commitment; it does not independently verify provider origin or data accuracy |
-| Order reference | A claim that requires exchange account records |
-| Claimed time | Signed text; it is not an independently anchored decision timestamp |
-
-V1 receipts remain supported. V2 trade receipts additionally sign `researchRunId`, `decisionDigest`, and `proposalHash`. A receipt does not prove that a prediction was correct, that research preceded a trade, or that a provider delivered authentic data. Telt makes no first-in-market or trustless-reasoning claim.
-
-## Reproduce the offline proof
-
-Use Node.js 22.17, matching the runtime image:
+Install and verify the project:
 
 ```bash
 npm ci
 npm run check
 npm run prove
-node scripts/build-verifier.mjs
 ```
 
-The `prove` command runs the fixture research runtime with recorded responses, a public test key, a fixed clock, and an in-memory database. It stores explicit `NO_TRADE` decisions and generates `web/lib/demo.json`. The fixture conclusion is scripted so the proof remains deterministic. No network call, payment, or order is made.
+Point the MCP client at the built server:
 
-The generated fixture and browser verifier remain under `web/lib` for reproducible offline proof. The homepage uses `POST https://mcp.telt.site/demo` for the live demo. Telt reads a public Binance market snapshot, sends bounded evidence through its server-side Anthropic model seam, validates the structured verdict, and returns the result.
-
-## Run the web app locally
-
-```bash
-cd web
-npm ci --ignore-scripts
-npm run build
-npm start -- -p 3100
+```text
+Command: node
+Argument: /absolute/path/to/kertel/apps/telt/dist/mcp.js
 ```
+
+Start in fixture mode. Configure the local environment only when the fixture loop is clear. The main settings are documented in [.env.example](.env.example):
+
+```text
+TELT_MODE=live
+TELT_BINANCE_MCP_TOKEN=...
+TELT_LIVE_EXECUTION=true
+TELT_MAX_LEVERAGE=3
+TELT_MAX_FUTURES_NOTIONAL=50
+TELT_MAX_TOTAL_EXPOSURE=50
+TELT_MAX_TOTAL_HEDGE_NOTIONAL=50
+```
+
+Keep tokens, keys, local databases, demo notes, audit reports, and assistant workspaces outside Git. Telt loads `.env` in the local MCP process. Do not paste credentials into a website, screenshot, repository, or chat message.
+
+## Public demo
+
+The homepage demonstrates the reasoning boundary without an account:
+
+1. The backend reads a fresh public Binance book.
+2. It sends only the bounded market evidence to the model.
+3. The model response must match Telt's verdict schema.
+4. The browser shows the source time, risks, confidence, and no-order boundary.
+
+The public question is kept separate from the evidence block, so a user's wording cannot be misreported as prompt-injection evidence. The route has no account, research-wallet, or order capability.
+
+## Research and Memory Lane
+
+Protection checks spend nothing. A paid investigation runs only when the user asks for market context. Telt can use CoinGecko, CoinMarketCap, Nansen, The Graph, or OpenPulse when the symbol has a verified provider mapping and the configured x402 budget permits the call.
+
+Missing provider coverage does not weaken the hedge controller. Telt reports that the outside evidence is unavailable and continues to use Binance account facts for protection. Research cannot open, resize, close, delay, or veto a hedge.
+
+Memory Lane converts journal rows into a readable position history. An MCP client with Agent Memory can carry that history between sessions without giving Telt a memory credential.
+
+## Safety model
+
+- Live orders require both `TELT_MODE=live` and `TELT_LIVE_EXECUTION=true`.
+- Guard Mode needs a current, unexpired mandate for the exact symbol.
+- Existing Futures longs and cross-margin positions are refused by the protective-short controller.
+- Every increase sets isolated margin and the approved margin multiple before the order.
+- Every reduction is reduce-only.
+- A deterministic client order ID prevents blind duplicate submission.
+- Partial fills, transport uncertainty, unexpected final quantities, stale reads, and restart-time pending operations engage the persistent kill switch.
+- Paid research has per-call, per-run, and daily caps.
+- Discretionary live entries stay paused because account-wide realised loss accounting is not complete.
+
+A hedge reduces directional exposure. It does not guarantee a fill price, profit, breakeven result, or protection from liquidation. Fees, funding, basis, and later Spot changes can create drift.
 
 ## Current limits and roadmap
 
-- Protection covers one Spot holding at a time. It does not reconcile total account exposure or multi-asset risk.
-- Coverage is quantity based. Fees, funding, price basis, liquidation, and later balance changes can create drift.
-- Guard Mode is opt-in and bounded to one symbol, isolated USD-M Futures, a coverage range, a notional ceiling, leverage, cooldown, and expiry. Opening and resizing remain behind the live execution gate and existing exchange reconciliation checks.
-- Account-wide loss and total exposure accounting, WebSocket event ingestion, transition notifications, and multi-symbol mandates remain roadmap work.
-- Paid research depends on verified provider mappings. Telt reports missing coverage instead of guessing an identifier.
-- Unknown or incomplete fills halt activity until reconciliation. No system can guarantee a fill price, profit, or liquidation outcome.
+The current Guard portfolio totals active Guard symbols. It does not discover and price every unguarded asset or every unrelated Futures position in the account. Account-wide realised loss is also unavailable.
 
-Roadmap: account-wide loss and exposure accounting, WebSocket plus polling reconciliation, transition alerts, wider verified research coverage, hedge performance reconciliation, and operator pause, resume, and export controls.
+The monitor uses 30 second polling. WebSocket event intake and transition notifications are not built. If a process stops after an order is sent but before the result is stored, the next runtime halts. Automatic exchange-order recovery remains roadmap work, so the operator must reconcile that state before resuming.
 
-Telt refuses unsupported pairs, conflicting Futures positions, insufficient margin, and orders outside configured limits. A hedge reduces directional exposure; fees, funding, price differences, liquidation risk, and later balance changes can affect the result.
+Next work:
 
-The current release stays with one holding, one hedge, and one explicit approval path so every live step can be inspected.
+- discover and price all account assets and open Futures positions for full-account risk totals
+- reconcile interrupted Agent OS orders by deterministic client order ID
+- add WebSocket events with polling reconciliation
+- send protection, halt, and mandate-expiry notifications
+- measure hedge drift, fees, funding, and basis over complete lifecycles
 
-## Track A presentation
+## Verify the build
 
-Start on the public site without account access and run one live market question. Then connect ChatGPT or Codex to a local Telt MCP runtime backed by a funded demo sub-account. Say “protect all my SOL at 2x,” review the two legs, type the returned confirmation code, and show the Spot and Futures account changes in Binance. Ask “how protected is my SOL?” to show the combined state, then ask Telt to remove the protection and show the reduce-only close. Identify Binance Agent OS as the account and execution integration throughout.
+```bash
+npm run typecheck
+npm run test
+npm run prove
+node scripts/build-verifier.mjs
+cd web && npm run build
+```
 
-[Submission walkthrough](docs/TRACK_A_DEMO.md) · [Implementation notes](docs/IMPLEMENTATION_2026-09-08.md) · [Runbook](docs/RUNBOOK.md)
+`npm run prove` uses recorded provider responses, a public test key, a fixed clock, and an in-memory database. It makes no network call, payment, or order. The generated fixture powers the offline proof and browser verifier.
+
+The browser verifier proves that the displayed fields match the claimed signer. It does not independently prove provider origin, x402 settlement, order execution, or chronology. Those claims require their own external records.
+
+## Repository map
+
+```text
+apps/telt/          MCP server, daemon, Guard controller, execution and journal
+packages/core/      fixed-point math, policies, mandates, receipts and verdicts
+packages/providers/ paid and free research adapters behind one provider seam
+packages/x402/      x402 rail selection, payments, fixtures and attestations
+web/                public demo, connection guide and browser verifier
+scripts/            reproducible proof and live read-only probes
+fixtures/           recorded exchange and provider responses for offline tests
+```
+
+## Track A submission story
+
+The demo should show one memorable loop:
+
+1. Approve Guard Mode for a funded Spot holding.
+2. Show Telt classify it as unprotected and open the permitted isolated short.
+3. Change the Spot quantity so the hedge drifts.
+4. Force a monitor sweep and show the bounded adjustment.
+5. Open Binance beside the MCP conversation and show the real Spot balance, Futures position, and order reference.
+6. Show Memory Lane, then revoke the mandate and prove that future adjustments are no longer permitted.
+
+This demonstrates a persistent agent behavior that depends on Binance Agent OS: account reads, Spot and Futures state, controlled execution, fill verification, and revocable authority.
+
+[Track A demo notes](docs/TRACK_A_DEMO.md) | [Architecture](docs/ARCHITECTURE.md) | [MCP setup](https://telt.site/connect)

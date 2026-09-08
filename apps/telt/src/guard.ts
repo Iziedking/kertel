@@ -40,12 +40,18 @@ export function classifyGuard(input: GuardObservation): GuardDecision {
     return { state: "unknown", coverageBps: 0, targetQuantity: null, adjustmentQuantity: null, because: "Market or account data is stale; Telt is holding and will not guess." };
   }
   if (!fp.isPositive(input.spotQuantity)) {
-    return { state: "unknown", coverageBps: 0, targetQuantity: fp.zero(input.futuresShortQuantity.scale), adjustmentQuantity: null, because: "No Spot exposure was proven." };
+    const targetQuantity = fp.zero(input.futuresShortQuantity.scale);
+    if (fp.isPositive(input.futuresShortQuantity)) {
+      return { state: "overhedged", coverageBps: 0, targetQuantity, adjustmentQuantity: fp.negate(input.futuresShortQuantity), because: "The Spot exposure is zero, so the remaining Futures short must be removed." };
+    }
+    return { state: "protected", coverageBps: 10000, targetQuantity, adjustmentQuantity: targetQuantity, because: "The account has no Spot exposure and no Futures hedge." };
   }
   const coverageBps = Number(fp.divide(fp.multiply(input.futuresShortQuantity, fp.parse("10000")), input.spotQuantity, 0, "floor").atoms);
-  const targetQuantity = fp.applyBasisPoints(input.spotQuantity, input.targetCoverageBps, "floor");
+  const quantityScale = Math.min(38, input.spotQuantity.scale + 4);
+  const preciseSpotQuantity = fp.rescale(input.spotQuantity, quantityScale, "trunc");
+  const targetQuantity = fp.applyBasisPoints(preciseSpotQuantity, input.targetCoverageBps, "floor");
   const delta = fp.subtract(targetQuantity, input.futuresShortQuantity);
-  const tolerance = fp.applyBasisPoints(input.spotQuantity, input.toleranceBps, "floor");
+  const tolerance = fp.applyBasisPoints(preciseSpotQuantity, input.toleranceBps, "floor");
   if (fp.isZero(input.futuresShortQuantity)) {
     return { state: "unprotected", coverageBps, targetQuantity, adjustmentQuantity: targetQuantity, because: "Spot exposure exists with no matching Futures short." };
   }
@@ -54,4 +60,3 @@ export function classifyGuard(input: GuardObservation): GuardDecision {
   }
   return { state: "protected", coverageBps, targetQuantity, adjustmentQuantity: fp.zero(targetQuantity.scale), because: `Coverage is within the ${String(Math.floor(input.toleranceBps / 100))}% tolerance band.` };
 }
-

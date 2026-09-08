@@ -50,6 +50,7 @@ describe("public live demo", () => {
     expect(demo.market).toHaveBeenCalledOnce();
     expect(demo.judge).toHaveBeenCalledOnce();
     expect(demo.judge.mock.calls[0]?.[0].evidence).toContain("No order will be placed");
+    expect(demo.judge.mock.calls[0]?.[0].evidence).not.toContain("Should I buy ETH?");
   });
 
   it("caches an identical question for sixty seconds", async () => {

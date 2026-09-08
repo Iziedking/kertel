@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Telt as an OpenClaw plugin: telt_* agent tools over the deterministic core.",
+  "description": "Telt MCP server and daemon for bounded Binance Spot hedge monitoring, adjustment, reconciliation, and Memory Lane records.",
   "main": "./dist/index.js",
   "openclaw": {
     "extensions": [
@@ -18,7 +18,7 @@
     "@telt/core": "0.1.0",
     "@telt/providers": "0.1.0",
     "@telt/x402": "0.1.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@sinclair/typebox": "0.34.52",
     "zod": "3.25.76"
   },

@@ -43,6 +43,8 @@ export function statusTool(runtime: Runtime): AgentTool {
       const safety = store.safetyState();
       const spent = store.spentOn(now);
       const unresolved = store.unresolvedPayments();
+      const unresolvedGuard = store.mandates.unresolvedGuardOperations();
+      const monitor = store.monitorCheckpoint?.() ?? null;
       const rails = railsFor(config.railPreference);
 
       const lines: string[] = [];
@@ -89,7 +91,7 @@ export function statusTool(runtime: Runtime): AgentTool {
       lines.push(
         `  Max per trade:   ${fp.format(config.policy.trading.maxTradeNotional)} (exchange minimum is 5.00, so the usable window is narrow)`,
       );
-      lines.push("  Daily loss / total exposure: unavailable, not enforced as account-wide caps");
+      lines.push("  Account-wide realised loss: unavailable");
       lines.push("  Discretionary live entries: paused until complete risk accounting is available");
       lines.push(`  Max slippage:    ${String(config.policy.trading.maxSlippageBps)} bps`);
       lines.push("");
@@ -104,6 +106,8 @@ export function statusTool(runtime: Runtime): AgentTool {
         lines.push(
           `  Max position:    ${fp.format(config.maxFuturesNotional)} (on the position, not the margin behind it)`,
         );
+        lines.push(`  Guard Spot cap:  ${fp.format(config.maxTotalExposure)} across active Guard symbols`);
+        lines.push(`  Guard hedge cap: ${fp.format(config.maxTotalHedgeNotional)} across active Guard symbols`);
       }
       lines.push("");
 
@@ -122,6 +126,13 @@ export function statusTool(runtime: Runtime): AgentTool {
           lines.push(`    ${attempt.provider} $${attempt.chargedUsdc} (${attempt.attemptId})`);
         }
         lines.push("  Reconcile these before resuming.");
+      }
+      if (unresolvedGuard.length > 0) {
+        lines.push(`  ${String(unresolvedGuard.length)} Guard adjustment(s) need exchange reconciliation.`);
+      }
+      if (monitor !== null) {
+        lines.push(`  Monitor checkpoint: ${monitor.running ? "running" : "stopped"}, ${monitor.result} at ${formatInstant(monitor.at)}`);
+        if (monitor.halted !== null) lines.push(`  Monitor halt: ${monitor.halted}`);
       }
 
       if (config.degraded.length > 0) {
