@@ -1,6 +1,6 @@
 # Telt
 
-Telt is a conversational Binance protection agent built on Binance Agent OS. Tell it which Spot holding to protect. It reads the real balance, calculates a matching isolated USD-M Futures short, shows the two legs together, and waits for a one-use confirmation code before opening anything.
+Evidence-first Binance Agent OS trader. Telt reads a real Spot balance, sizes an isolated USD-M Futures hedge, uses capped paid research for context, and waits for explicit confirmation before live execution.
 
 - [Run the live demo](https://telt.site/#demo)
 - [Connect an MCP client](https://telt.site/connect)
@@ -17,7 +17,18 @@ The public demo requires no account. Ask a market question and Telt will read a 
 
 The browser receives no provider key, account credential, research wallet, or order capability.
 
-For the full agent workflow, connect ChatGPT or another MCP client to `https://mcp.telt.site/mcp`. The client maps plain requests such as “protect my SOL” and “how protected is my BTC?” to Telt's guarded account tools.
+For the full agent workflow, connect ChatGPT, Codex, Claude, or another MCP client to `https://mcp.telt.site/mcp`. Ask in plain language: “protect my SOL,” “check my protection,” or “show my Memory Lane.”
+
+The public site and hosted MCP endpoint cannot access a user's Binance account. Live account actions run from a local Telt MCP process connected to that user's Binance Agent OS session.
+
+## Live capabilities
+
+- Spot market orders with exchange filters, balance checks, slippage bounds, one-use confirmation codes, and reconciliation.
+- Agent OS USDⓈ-M Futures positions with isolated margin, a configured margin multiplier ceiling, and reduce-only closes.
+- One-symbol protection for any USDT pair listed on both Spot and USD-M Futures. Telt refuses Spot-only pairs and conflicting existing Futures positions.
+- Protection Watch, which checks both legs for free. An explicit investigation buys paid research and attaches it as context without giving research authority over the hedge.
+- Memory Lane, which records proposals, openings, checks, investigations, and removals for the next session.
+- Approved exit plans that can scale out, ratchet stops, and halt on unknown or incomplete fills.
 
 ## How it works
 
@@ -63,7 +74,7 @@ For a local MCP server, use the command `node` with the argument `/absolute/path
 
 Configure `TELT_BINANCE_MCP_TOKEN` in the local runtime for Binance Agent OS account access. Optional paid research uses `TELT_X402_PRIVATE_KEY`. See [.env.example](.env.example), and keep credentials out of browser forms, screenshots, and public chat.
 
-For connected account workflows, the MCP client supplies the model reasoning. Telt's separate autonomous hunting workflow uses its own Anthropic configuration.
+For connected account workflows, the MCP client supplies the model reasoning. Telt's separate autonomous hunting workflow uses its own Anthropic configuration. Discretionary live entries remain paused until account-wide risk accounting is complete.
 
 Live execution requires both `TELT_MODE=live` and `TELT_LIVE_EXECUTION=true`. These settings do not approve an individual order. Do not enable live execution for a demonstration.
 
@@ -106,18 +117,19 @@ npm run build
 npm start -- -p 3100
 ```
 
-## Supported scope
+## Current limits and roadmap
 
-- Protect one Spot holding at a time when its USDT pair trades on both Binance Spot and USD-M Futures.
-- Review the calculated short, isolated leverage, margin, coverage, and net exposure before confirming.
-- Check protection for free, or explicitly buy outside research when a market move needs explanation.
-- Read the full protection lifecycle through Memory Lane and carry it between sessions with Agent Memory.
-- Remove protection with a reduce-only close.
-- Keep the runtime online while Telt is monitoring an active position.
+- Protection covers one Spot holding at a time. It does not reconcile total account exposure or multi-asset risk.
+- Coverage is quantity based. Fees, funding, price basis, liquidation, and later balance changes can create drift.
+- Protection Watch is a conversational check. Continuous alerts, timed removal, and restart-safe watch state are roadmap work.
+- Paid research depends on verified provider mappings. Telt reports missing coverage instead of guessing an identifier.
+- Unknown or incomplete fills halt activity until reconciliation. No system can guarantee a fill price, profit, or liquidation outcome.
+
+Roadmap: account-wide loss and exposure accounting, durable watch state with transition alerts, wider verified research coverage, hedge performance reconciliation, and operator pause, resume, and export controls.
 
 Telt refuses unsupported pairs, conflicting Futures positions, insufficient margin, and orders outside configured limits. A hedge reduces directional exposure; fees, funding, price differences, liquidation risk, and later balance changes can affect the result.
 
-Automatic timed removal and portfolio-wide hedging are planned extensions. The submitted workflow is deliberately one holding, one hedge, and one explicit approval path that can be demonstrated end to end.
+The current release stays with one holding, one hedge, and one explicit approval path so every live step can be inspected.
 
 ## Track A presentation
 

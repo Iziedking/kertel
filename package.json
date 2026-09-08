@@ -2,7 +2,7 @@
   "name": "telt",
   "version": "0.1.0",
   "private": true,
-  "description": "Evidence-driven crypto trading agent operated from WhatsApp. Researches first, proposes second, executes only after exact confirmation, verifies every result.",
+  "description": "Evidence-first Binance trading agent for Agent OS. Researches with bounded paid evidence, checks account and exchange rules, protects Spot holdings with isolated Futures hedges, and requires explicit confirmation before live execution.",
   "license": "MIT",
   "type": "module",
   "engines": {

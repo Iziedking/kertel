@@ -22,7 +22,7 @@ const mono = Space_Mono({
 
 const TITLE = "Telt · Your Binance AI agent";
 const DESCRIPTION =
-  "A conversational Binance Agent OS tool that reads a Spot holding, calculates a matching isolated Futures hedge, and waits for human approval.";
+  "An evidence-first Binance Agent OS agent that researches with bounded paid evidence, protects Spot holdings with isolated Futures hedges, and waits for explicit confirmation before live execution.";
 
 export const metadata: Metadata = {
   title: TITLE,

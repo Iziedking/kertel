@@ -22,7 +22,8 @@ export default function Home() {
           </h1>
           <p className="lede">
             Telt reads your Binance Spot holding, calculates a matching isolated
-            Futures hedge, and waits for your approval before it acts.
+            Futures hedge, and waits for your approval before it acts. Optional
+            paid research explains the position without controlling it.
           </p>
           <div className="actions">
             <Link href="#demo" className="button primary">
@@ -146,6 +147,47 @@ export default function Home() {
               After your one-use confirmation, Protection Watch checks both
               legs for free. Ask for paid context only when you need it. Memory
               Lane records the story through the reduce-only close.
+            </p>
+          </article>
+        </div>
+      </section>
+      <section className="wrap section" id="capabilities">
+        <div className="section-top">
+          <div>
+            <p className="eyebrow">CAPABILITY MAP</p>
+            <h2>Live now. Next by design.</h2>
+          </div>
+          <p className="section-intro">
+            The demo shows a real account workflow with clear boundaries. The
+            roadmap names the accounting and continuity work still ahead.
+          </p>
+        </div>
+        <div className="three-grid">
+          <article className="feature-card mint">
+            <span className="card-index">LIVE / ACCOUNT PATH</span>
+            <h3>Protect a Binance Spot holding.</h3>
+            <p>
+              Telt reads the balance, validates the matching USDT markets,
+              sizes a short, checks margin and filters, then waits for your
+              one-use confirmation before opening the Futures leg.
+            </p>
+          </article>
+          <article className="feature-card lavender">
+            <span className="card-index">LIVE / EVIDENCE PATH</span>
+            <h3>Research when the question earns it.</h3>
+            <p>
+              Binance market data is free. Paid research runs only on request,
+              respects per-call and daily caps, and stays explanatory. A
+              missing provider mapping leaves the account check usable.
+            </p>
+          </article>
+          <article className="feature-card sand">
+            <span className="card-index">NEXT / ACCOUNTING PATH</span>
+            <h3>Broaden protection with proof.</h3>
+            <p>
+              Portfolio-wide exposure, restart-safe watch state, transition
+              alerts, and wider provider coverage come after the current
+              one-symbol path has the accounting to support them.
             </p>
           </article>
         </div>

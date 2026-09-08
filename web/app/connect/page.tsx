@@ -55,9 +55,10 @@ export default function Connect() {
             ask: <strong>“Investigate my SOL protection and show its Memory Lane.”</strong>
           </p>
           <p className="notice">
-            Anonymous MCP access is read-only. Account protection runs through
-            your local Telt process and your own Binance Agent OS session. Never
-            paste its token into this website or a chat message.
+            The public MCP endpoint cannot use your Binance account. Live
+            protection runs through your local Telt process and your own
+            Binance Agent OS session. Never paste its token into this website
+            or a chat message.
           </p>
         </section>
 
@@ -94,9 +95,9 @@ node apps/telt/dist/serve.js`}</pre>
             <li>Read the Memory Lane, or ask Telt to remove the hedge.</li>
           </ol>
           <p>
-            Protection remains deterministic even when a paid provider has no
+            Protection remains available even when a paid provider has no
             coverage. Research explains the market and Memory Lane preserves
-            the account story. Neither can silently approve or place an order.
+            the account story. Neither can approve or place an order.
           </p>
         </section>
       </div>
