@@ -80,13 +80,23 @@ function fakeFutures(options: FakeOptions = {}) {
       return ok(current);
     },
     async markPrice() {
-      const ticker = options.ticker === undefined ? fp.parse("2500.00") : options.ticker;
+      const ticker =
+        options.ticker === undefined ? fp.parse("2500.00") : options.ticker;
       return ticker === null
-        ? refuse("MARKET_DATA_STALE", "Binance returned no usable futures price for ETHUSDT.")
+        ? refuse(
+            "MARKET_DATA_STALE",
+            "Binance returned no usable futures price for ETHUSDT.",
+          )
         : ok(ticker);
     },
     async balances() {
-      return ok([{ asset: "USDT", balance: fp.parse("25.00"), available: fp.parse("25.00") }]);
+      return ok([
+        {
+          asset: "USDT",
+          balance: fp.parse("25.00"),
+          available: fp.parse("25.00"),
+        },
+      ]);
     },
     async setIsolated() {
       calls.push("setIsolated");
@@ -127,10 +137,17 @@ function fakeFutures(options: FakeOptions = {}) {
       });
     },
   };
-  return { client: client as unknown as FuturesClient, calls, position: () => current };
+  return {
+    client: client as unknown as FuturesClient,
+    calls,
+    position: () => current,
+  };
 }
 
-function deps(client: FuturesClient, overrides: Partial<FuturesDeps> = {}): FuturesDeps {
+function deps(
+  client: FuturesClient,
+  overrides: Partial<FuturesDeps> = {},
+): FuturesDeps {
   return {
     futures: client,
     store: openStore(":memory:"),
@@ -171,13 +188,15 @@ describe("reading a futures position", () => {
 
   it("knows which way a position points", () => {
     expect(positionSide(long())).toBe("LONG");
-    expect(positionSide(long({ positionAmt: fp.parse("-0.012") }))).toBe("SHORT");
+    expect(positionSide(long({ positionAmt: fp.parse("-0.012") }))).toBe(
+      "SHORT",
+    );
     expect(positionSide(flat())).toBe("FLAT");
   });
 });
 
 describe("opening a position", () => {
-  it("sets isolated margin and leverage before issuing a code", async () => {
+  it("does not mutate margin or leverage when issuing a proposal", async () => {
     const fake = fakeFutures();
     const result = await proposeFutures(deps(fake.client), {
       symbol: "ETHUSDT",
@@ -187,10 +206,8 @@ describe("opening a position", () => {
     });
 
     expect(result.ok).toBe(true);
-    // Both, and before anything is agreed to: a user must never be shown a plan
-    // that could not have been set up.
-    expect(fake.calls).toContain("setIsolated");
-    expect(fake.calls).toContain("setLeverage:3");
+    expect(fake.calls).not.toContain("setIsolated");
+    expect(fake.calls).not.toContain("setLeverage:3");
     expect(fake.calls).not.toContain("open");
     expect(result.body).toContain("isolated margin");
     expect(result.body).toContain("confirm KTL-");
@@ -266,13 +283,19 @@ describe("opening a position", () => {
 
   it("refuses when isolated margin could not be set, rather than opening into cross", async () => {
     const fake = fakeFutures({ isolatedFails: true });
-    const result = await proposeFutures(deps(fake.client), {
+    const context = deps(fake.client);
+    const result = await proposeFutures(context, {
       symbol: "ETHUSDT",
       side: "BUY",
       notional: "30",
       leverage: 3,
     });
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    const confirmed = await confirmFutures(
+      context,
+      result.body.match(/KTL-[A-Z0-9]+/)![0],
+    );
+    expect(confirmed.ok).toBe(false);
     expect(fake.calls).not.toContain("open");
   });
 
@@ -412,7 +435,12 @@ describe("confirming a position", () => {
   it("refuses a code nobody issued", async () => {
     const fake = fakeFutures();
     const d = deps(fake.client);
-    await proposeFutures(d, { symbol: "ETHUSDT", side: "BUY", notional: "30", leverage: 3 });
+    await proposeFutures(d, {
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "30",
+      leverage: 3,
+    });
     const result = await confirmFutures(d, "KTL-ZZZZZZ");
     expect(result.refusalCode).toBe("TOKEN_NOT_FOUND");
     expect(fake.calls).not.toContain("open");
@@ -422,7 +450,10 @@ describe("confirming a position", () => {
 describe("closing a position", () => {
   it("needs no code, because getting out is the safe direction", async () => {
     const fake = fakeFutures({ position: long() });
-    const result = await closeFutures(deps(fake.client), { symbol: "ETHUSDT", fractionBps: 10_000 });
+    const result = await closeFutures(deps(fake.client), {
+      symbol: "ETHUSDT",
+      fractionBps: 10_000,
+    });
 
     expect(result.ok).toBe(true);
     expect(fake.calls.some((call) => call.startsWith("close:"))).toBe(true);
@@ -430,24 +461,39 @@ describe("closing a position", () => {
   });
 
   it("closes part of it when asked", async () => {
-    const fake = fakeFutures({ position: long({ positionAmt: fp.parse("0.100") }) });
-    await closeFutures(deps(fake.client), { symbol: "ETHUSDT", fractionBps: 5000 });
+    const fake = fakeFutures({
+      position: long({ positionAmt: fp.parse("0.100") }),
+    });
+    await closeFutures(deps(fake.client), {
+      symbol: "ETHUSDT",
+      fractionBps: 5000,
+    });
     expect(fake.calls).toContain("close:0.050");
   });
 
   it("closes the lot rather than stranding a remainder too small to close later", async () => {
     // 90% of 0.0025 is 0.00225, floored to 0.002, leaving 0.0005 — below the
     // 0.001 minimum, so the rest could never be closed on its own.
-    const fake = fakeFutures({ position: long({ positionAmt: fp.parse("0.0025") }) });
-    await closeFutures(deps(fake.client), { symbol: "ETHUSDT", fractionBps: 9000 });
+    const fake = fakeFutures({
+      position: long({ positionAmt: fp.parse("0.0025") }),
+    });
+    await closeFutures(deps(fake.client), {
+      symbol: "ETHUSDT",
+      fractionBps: 9000,
+    });
     expect(fake.calls).toContain("close:0.0025");
   });
 
   it("closes a minimum-size position in full, and says a partial was impossible", async () => {
     // Half of the minimum lot is not an order the exchange will take. Refusing
     // would leave a position nobody can exit.
-    const fake = fakeFutures({ position: long({ positionAmt: fp.parse("0.001") }) });
-    const result = await closeFutures(deps(fake.client), { symbol: "ETHUSDT", fractionBps: 5000 });
+    const fake = fakeFutures({
+      position: long({ positionAmt: fp.parse("0.001") }),
+    });
+    const result = await closeFutures(deps(fake.client), {
+      symbol: "ETHUSDT",
+      fractionBps: 5000,
+    });
 
     expect(fake.calls).toContain("close:0.001");
     expect(result.body).toContain("a partial close was not possible");
@@ -455,7 +501,10 @@ describe("closing a position", () => {
 
   it("says so plainly when there is nothing open", async () => {
     const fake = fakeFutures();
-    const result = await closeFutures(deps(fake.client), { symbol: "ETHUSDT", fractionBps: 10_000 });
+    const result = await closeFutures(deps(fake.client), {
+      symbol: "ETHUSDT",
+      fractionBps: 10_000,
+    });
     expect(result.ok).toBe(true);
     expect(result.body).toContain("no open");
   });
@@ -464,7 +513,9 @@ describe("closing a position", () => {
 describe("what a person sees", () => {
   it("warns when liquidation is inside an ordinary day's range", async () => {
     // Mark 2500, liquidation 2400: 4% away.
-    const fake = fakeFutures({ position: long({ liquidationPrice: fp.parse("2400.00") }) });
+    const fake = fakeFutures({
+      position: long({ liquidationPrice: fp.parse("2400.00") }),
+    });
     const body = await describeFutures(deps(fake.client), ["ETHUSDT"]);
     expect(body).toContain("WARNING: liquidation is 4% away");
   });
@@ -480,5 +531,40 @@ describe("what a person sees", () => {
     const fake = fakeFutures();
     const body = await describeFutures(deps(fake.client), ["ETHUSDT"]);
     expect(body).toContain("No open positions");
+  });
+});
+
+describe("futures confirmation isolation", () => {
+  it("rejects another runtime's code without mutating account settings", async () => {
+    const fake = fakeFutures();
+    const owner = deps(fake.client);
+    const other = deps(fake.client);
+    const proposal = await proposeFutures(owner, {
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "30",
+      leverage: 3,
+    });
+    expect((await confirmFutures(other, codeFrom(proposal.body))).ok).toBe(
+      false,
+    );
+    expect(fake.calls).not.toContain("setIsolated");
+    expect(fake.calls).not.toContain("open");
+  });
+  it("rechecks the kill switch after a proposal", async () => {
+    const fake = fakeFutures();
+    const context = deps(fake.client);
+    const proposal = await proposeFutures(context, {
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "30",
+      leverage: 3,
+    });
+    context.store.engageKillSwitch("test stop", NOW);
+    expect((await confirmFutures(context, codeFrom(proposal.body))).ok).toBe(
+      false,
+    );
+    expect(fake.calls).not.toContain("setIsolated");
+    expect(fake.calls).not.toContain("open");
   });
 });

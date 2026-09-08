@@ -50,6 +50,7 @@ export type VenueReading = {
 };
 
 export type VenueFill = {
+  readonly status: string;
   readonly filledQuantity: FixedPoint;
   readonly averagePrice: FixedPoint | null;
   /** The exchange's own id for the fill, for the journal and reconciliation. */
@@ -106,6 +107,7 @@ export function spotVenue(binance: BinanceClient): Venue {
       });
       if (!placed.ok) return placed;
       return ok({
+        status: placed.value.status,
         filledQuantity: placed.value.filledQuantity,
         averagePrice: placed.value.averagePrice,
         exchangeOrderRef: placed.value.exchangeOrderRef,
@@ -176,6 +178,7 @@ export function futuresVenue(futures: FuturesClient): Venue {
       });
       if (!closed.ok) return closed;
       return ok({
+        status: closed.value.status.toLowerCase(),
         filledQuantity: closed.value.filledQuantity,
         averagePrice: closed.value.averagePrice,
         exchangeOrderRef: closed.value.orderRef,

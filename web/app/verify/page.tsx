@@ -1,188 +1,232 @@
 "use client";
-
-/**
- * The verifier.
- *
- * It calls the public MCP endpoint — the same one anybody can point their own
- * client at — rather than a private route with special access to the truth.
- * That is deliberate: a verifier the site alone can run is just another thing
- * to take on trust, and the whole point here is that nobody has to.
- *
- * It also refuses to overstate what it did. The signature is settled here. The
- * payments are facts about a blockchain, so they come back as links, and the
- * reader is told plainly that following them is their job.
- */
-
 import { useState } from "react";
-
-const ENDPOINT =
-  process.env.NEXT_PUBLIC_TELT_MCP ?? "https://mcp.telt.site/mcp";
-
-const EXAMPLE = `TELT-ATTESTATION-1
-symbol=ETHUSDT
-goal=price_check
-at=2026-09-08T02:52:01.134Z
-agent=0xd2f6393c6a916acb98057a5920952084b838cfd1
-provenance=8c07355f4d640a4f7654116add00fa63b89e2597fa41d958906870ee36436442
-spent=0.01
-decision=EVIDENCE_ONLY
-order=none
-payment=coingecko:base-usdc:0x8f6d21822954bc2d9606a6e4a7f9c9464e62647f1c73bfb2059b3a72b486b873:0.01
-sig=0x9941c368ddddfc8621fadb557b384d7913ac715c91c4049f11012c5795f8badf0139eb657e6d48a50c578d882484a30d75853d97ac0a682204d9b648b74577de1b`;
-
-/** One JSON-RPC call over streamable HTTP, which answers as SSE. */
-async function callTool(name: string, args: unknown): Promise<string> {
-  const response = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      accept: "application/json, text/event-stream",
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
-      params: { name, arguments: args },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`The endpoint answered ${String(response.status)}.`);
-  }
-
-  const text = await response.text();
-  for (const line of text.split("\n")) {
-    const payload = line.startsWith("data: ") ? line.slice(6) : line;
-    if (payload.trim() === "" || payload.startsWith("event:")) continue;
-    try {
-      const message = JSON.parse(payload) as {
-        result?: { content?: { text?: string }[] };
-        error?: { message?: string };
-      };
-      if (message.error !== undefined) {
-        throw new Error(message.error.message ?? "The endpoint refused that.");
-      }
-      if (message.result?.content !== undefined) {
-        return message.result.content.map((part) => part.text ?? "").join("\n");
-      }
-    } catch (cause) {
-      if (cause instanceof Error && cause.message !== "Unexpected end of JSON input") {
-        // A real error from the server, not a partial SSE frame.
-        if (!cause.message.startsWith("Unexpected token")) throw cause;
-      }
-    }
-  }
-  throw new Error("The endpoint answered in a shape this page does not recognise.");
-}
-
+import { recoverMessageAddress } from "viem";
+import { canonicalize, deserialize, explorerUrl } from "../../lib/attestation";
+import { EXAMPLE } from "../../lib/example";
+type Result = {
+  valid: boolean;
+  signer: string;
+  claimed: string;
+  decision: string;
+  at: string;
+  provenance: string;
+  order: string | null;
+  binding: string;
+  links: { provider: string; url: string }[];
+};
 export default function Verify() {
   const [text, setText] = useState("");
-  const [result, setResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  async function run(): Promise<void> {
+  const [result, setResult] = useState<Result | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  function change(value: string) {
+    setText(value);
+    setResult(null);
+    setError(null);
+  }
+  async function run() {
     setBusy(true);
     setResult(null);
+    setError(null);
     try {
-      const body = await callTool("telt_verify", { attestation: text });
-      setResult(body);
-      setFailed(!body.startsWith("Attestation verified"));
+      const signed = deserialize(text);
+      if (!signed)
+        throw new Error(
+          "This receipt is incomplete or has repeated fields. Paste one full attestation block.",
+        );
+      const signer = await recoverMessageAddress({
+        message: canonicalize(signed.attestation),
+        signature: signed.signature as `0x${string}`,
+      });
+      const a = signed.attestation;
+      setResult({
+        valid: signer.toLowerCase() === a.agent.toLowerCase(),
+        signer,
+        claimed: a.agent,
+        decision: a.decision,
+        at: a.at,
+        provenance: a.provenance,
+        order: a.order,
+        binding: a.binding
+          ? JSON.stringify(a.binding)
+          : "No v2 linkage in this receipt",
+        links: a.payments.flatMap((p) => {
+          const url = explorerUrl(p);
+          return url ? [{ provider: p.provider, url }] : [];
+        }),
+      });
     } catch (cause) {
-      setResult(
-        [
-          "This page could not reach the Telt endpoint.",
-          "",
-          cause instanceof Error ? cause.message : "Unknown problem.",
-          "",
-          "That says nothing about whether the attestation is real. You can check it",
-          "from your own machine instead:",
-          "",
-          "  claude mcp add telt --transport http " + ENDPOINT,
-          "  then ask: verify this attestation",
-        ].join("\n"),
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The receipt could not be verified.",
       );
-      setFailed(true);
     } finally {
       setBusy(false);
     }
   }
-
   return (
-    <main>
-      <div className="wrap">
-        <header className="hero" style={{ paddingBottom: 28 }}>
-          <p className="eyebrow">Proof of research</p>
-          <h1 className="display" style={{ fontSize: "clamp(32px, 4.6vw, 50px)" }}>
-            Check it yourself.
-          </h1>
-          <p className="lede">
-            Paste an attestation. This recovers who signed it, confirms that address matches the one
-            it claims paid for the evidence, and gives you the blockchain links so you can check the
-            payments with your own eyes.
-          </p>
-          <p className="lede">
-            It runs through the public MCP endpoint — the same one you can point your own client at.
-            Nothing here has a private path to the truth.
-          </p>
-        </header>
-
-        <section style={{ borderTop: "none", paddingTop: 0 }}>
+    <main className="wrap">
+      <header className="page-head">
+        <p className="eyebrow">INDEPENDENT SIGNATURE CHECK</p>
+        <h1>
+          Don’t take its word.
+          <br />
+          Check the receipt<span className="red">.</span>
+        </h1>
+        <p className="lede">
+          Paste a signed Telt receipt. Verification runs locally in your browser
+          using the shared open-source verifier and signature recovery. No Telt
+          server, wallet connection, or account is needed.
+        </p>
+      </header>
+      <div className="verify-grid">
+        <section className="panel">
+          <label className="field-label" htmlFor="attestation">
+            Signed attestation
+          </label>
           <textarea
+            id="attestation"
             className="field"
             value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder={"TELT-ATTESTATION-1\nsymbol=…\n…\nsig=0x…"}
+            maxLength={64000}
+            onChange={(e) => change(e.target.value)}
             spellCheck={false}
+            placeholder={"TELT-ATTESTATION-1\nsymbol=ETHUSDT\n…\nsig=0x…"}
           />
-          <div className="row">
-            <button className="button" onClick={() => void run()} disabled={busy || text.trim() === ""}>
-              {busy ? "Checking…" : "Verify"}
-            </button>
-            <button className="button ghost" onClick={() => setText(EXAMPLE)} disabled={busy}>
-              Use a real example
+          <div className="actions">
+            <button
+              className="button primary"
+              disabled={busy || !text.trim()}
+              onClick={() => void run()}
+            >
+              {busy ? "Checking…" : "Verify signature ↗"}
             </button>
             <button
-              className="button ghost"
-              onClick={() => setText(EXAMPLE.replace("EVIDENCE_ONLY", "BUY_CANDIDATE"))}
+              className="button secondary"
               disabled={busy}
+              onClick={() => change(EXAMPLE)}
             >
-              Try a forged one
+              Load sample
+            </button>
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() =>
+                change(EXAMPLE.replace("EVIDENCE_ONLY", "BUY_CANDIDATE"))
+              }
+            >
+              Tamper with sample
             </button>
           </div>
-
-          {result !== null && (
-            <pre className={`result ${failed ? "fail" : "pass"}`}>{result}</pre>
+          <p className="micro">
+            Sample: a recorded research receipt from September 8. Loading it
+            makes no payment.
+          </p>
+        </section>
+        <section className="panel" aria-live="polite">
+          <p className="eyebrow">WHAT WAS CHECKED</p>
+          <h3>
+            {result
+              ? result.valid
+                ? "Signature verified."
+                : "Signature mismatch."
+              : error
+                ? "Could not verify."
+                : "Evidence has layers."}
+          </h3>
+          {error && (
+            <p className="fail-label" role="alert">
+              {error}
+            </p>
           )}
-
-          <div className="panel" style={{ marginTop: 30 }}>
-            <h3 style={{ color: "var(--cream)" }}>What a pass means, and what it does not</h3>
-            <p className="dim">
-              A verified attestation proves this agent held this conclusion over this evidence, and
-              paid for that evidence with its own money before acting. The signature is settled here
-              with arithmetic; there is nothing to take on faith.
+          {!result && !error && (
+            <p className="empty-state">
+              Load the sample and verify it. Then change the conclusion and run
+              the check again to see the signature fail.
             </p>
-            <p className="dim">
-              It does not prove the conclusion was right. A well-evidenced trade can still lose, and
-              an agent that pays for good data can still read it badly. Proof is about the reasoning,
-              not the outcome.
-            </p>
-            <p className="dim">
-              It also does not confirm the payments — those are facts about a blockchain, and this
-              page has not queried it. Follow the explorer links, check the sender matches the agent,
-              the amount matches, and the block time sits before any order claimed.
+          )}
+          <div className="result-check">
+            <strong>
+              Signature integrity{" "}
+              <span
+                className={
+                  result ? (result.valid ? "pass-label" : "fail-label") : ""
+                }
+              >
+                {result ? (result.valid ? "PASS" : "FAIL") : "NOT CHECKED"}
+              </span>
+            </strong>
+            <p>
+              {result
+                ? result.valid
+                  ? "The recovered signer matches the address stated in this receipt. This does not identify a person or authenticate its claims."
+                  : "The displayed claims do not recover the stated signer. Treat this receipt as invalid."
+                : "Checks the signature against the receipt’s stated address."}
             </p>
           </div>
+          {[
+            "Payment settlement",
+            "Provider data and origin",
+            "Order and execution",
+            "Independent decision timestamp",
+          ].map((label) => (
+            <div className="result-check" key={label}>
+              <strong>
+                {label}
+                <span>NOT VERIFIED</span>
+              </strong>
+              <p>
+                {label === "Payment settlement"
+                  ? "A transaction reference is a claim. Check the receipt’s token-transfer payer, merchant, asset, amount, and success on the appropriate chain."
+                  : label === "Provider data and origin"
+                    ? "A signed digest does not establish that a provider returned accurate or authentic data."
+                    : label === "Order and execution"
+                      ? "An exchange order reference requires independent account records."
+                      : "A claimed time is signed text. A payment block time does not timestamp this off-chain decision."}
+              </p>
+            </div>
+          ))}
+          {result && (
+            <>
+              <details className="result-check">
+                <summary>Inspect recovered fields</summary>
+                <div className="audit-detail">
+                  Signer: {result.signer}
+                  <br />
+                  Claimed: {result.claimed}
+                  <br />
+                  Decision: {result.decision}
+                  <br />
+                  Claimed time: {result.at}
+                  <br />
+                  Evidence digest: {result.provenance}
+                  <br />
+                  Claimed order: {result.order ?? "none"}
+                  <br />
+                  Signed linkage: {result.binding}
+                </div>
+              </details>
+              {result.links.length > 0 && (
+                <div className="result-check">
+                  <strong>Claimed payment references</strong>
+                  {result.links.map((link, i) => (
+                    <p key={i}>
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Inspect {link.provider} transaction ↗
+                      </a>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </section>
       </div>
-
-      <footer>
-        <div className="wrap">
-          <p>
-            <a href="/">← Telt</a>
-          </p>
-        </div>
-      </footer>
     </main>
   );
 }

@@ -322,16 +322,18 @@ describe("a whole position, managed", () => {
   it("gets out at breakeven rather than giving back a gain", async () => {
     const exchange = fakeExchange("2000.00", "0.3000");
     const { runtime, advance } = build(exchange);
-    await runtime.planExit({
-      symbol: "ETHUSDT",
-      ladder: [],
-      stopLossBps: 1500,
-      trailing: null,
-      breakevenAtBps: 2000,
-      quantity: null,
-      entryPrice: "2000.00",
-      holdDays: 30,
-    }).then((plan) => runtime.armPlan(codeFrom(plan.body)));
+    await runtime
+      .planExit({
+        symbol: "ETHUSDT",
+        ladder: [],
+        stopLossBps: 1500,
+        trailing: null,
+        breakevenAtBps: 2000,
+        quantity: null,
+        entryPrice: "2000.00",
+        holdDays: 30,
+      })
+      .then((plan) => runtime.armPlan(codeFrom(plan.body)));
 
     // Up 20%: breakeven arms.
     exchange.setBid("2400.00");
@@ -364,7 +366,7 @@ describe("a whole position, managed", () => {
 });
 
 describe("the judgement a trigger does not make", () => {
-  it("buys evidence before acting on an abrupt stop, and files it", async () => {
+  it("executes an abrupt protective stop without waiting or paying for research", async () => {
     const exchange = fakeExchange("2000.00", "0.3000");
     const { runtime, store, advance } = build(exchange);
     await armed(runtime);
@@ -381,10 +383,9 @@ describe("the judgement a trigger does not make", () => {
 
     const journal = store.mandates.recentJournal(20);
     const checked = journal.find((entry) => entry.kind === "evidence_taken");
-    expect(checked).toBeDefined();
-    expect(checked?.headline).toContain("Checked why");
-    // The evidence is kept next to the decision, not thrown away.
-    expect(checked?.evidence).not.toBeNull();
+    expect(checked).toBeUndefined();
+    expect(exchange.orders).toHaveLength(1);
+    expect(journal.some((entry) => entry.kind === "exit_fired")).toBe(true);
     runtime.close();
   });
 
@@ -402,7 +403,9 @@ describe("the judgement a trigger does not make", () => {
     await runtime.checkPositions();
 
     const journal = store.mandates.recentJournal(20);
-    expect(journal.some((entry) => entry.kind === "evidence_taken")).toBe(false);
+    expect(journal.some((entry) => entry.kind === "evidence_taken")).toBe(
+      false,
+    );
     runtime.close();
   });
 
@@ -471,7 +474,10 @@ describe("when the monitor must stop itself", () => {
       async market() {
         return {
           ok: false as const,
-          error: { code: "PROVIDER_UNAVAILABLE" as const, detail: "Binance could not be reached." },
+          error: {
+            code: "PROVIDER_UNAVAILABLE" as const,
+            detail: "Binance could not be reached.",
+          },
         };
       },
       async account() {
@@ -479,7 +485,9 @@ describe("when the monitor must stop itself", () => {
           accountRef: "test",
           canTradeSpot: true,
           observedAt: instant(START),
-          balances: [{ asset: "ETH", free: fp.parse("0.3000"), locked: fp.parse("0") }],
+          balances: [
+            { asset: "ETH", free: fp.parse("0.3000"), locked: fp.parse("0") },
+          ],
         });
       },
       async placeMarketOrder() {
@@ -536,7 +544,9 @@ describe("when the monitor must stop itself", () => {
     expect(exchange.orders).toHaveLength(0);
     expect(sweep.lines.join(" ")).toContain("dry run");
     const journal = store.mandates.recentJournal(10);
-    expect(journal.some((entry) => entry.headline.startsWith("Would sell"))).toBe(true);
+    expect(
+      journal.some((entry) => entry.headline.startsWith("Would sell")),
+    ).toBe(true);
     runtime.close();
   });
 });
@@ -574,4 +584,40 @@ describe("the record a person reads", () => {
     expect(journal).toContain("letting the rest run");
     runtime.close();
   });
+});
+
+it("coalesces simultaneous manual and timer sweeps into one exit", async () => {
+  const exchange = fakeExchange("2000.00", "0.3000");
+  const { runtime, advance } = build(exchange);
+  await armed(runtime);
+  exchange.setBid("1600.00");
+  advance(30);
+  const [a, b] = await Promise.all([
+    runtime.checkPositions(),
+    runtime.checkPositions(),
+  ]);
+  expect(a).toEqual(b);
+  expect(exchange.orders).toHaveLength(1);
+  runtime.close();
+});
+it("does not mark a partially filled protective exit complete", async () => {
+  const exchange = fakeExchange("2000.00", "0.3000");
+  exchange.client.placeMarketOrder = async () =>
+    ok({
+      exchangeOrderRef: "partial-test",
+      clientOrderId: "partial-test",
+      status: "partially_filled",
+      filledQuantity: fp.parse("0.01"),
+      averagePrice: fp.parse("1600"),
+      feePaid: null,
+      raw: {},
+    });
+  const { runtime, store, advance } = build(exchange);
+  await armed(runtime);
+  exchange.setBid("1600.00");
+  advance(30);
+  await runtime.checkPositions();
+  expect(store.safetyState().killSwitchEngaged).toBe(true);
+  expect(store.mandates.active()).toHaveLength(1);
+  runtime.close();
 });

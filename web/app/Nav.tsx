@@ -12,7 +12,10 @@ export default function Nav() {
   function toggle() {
     const next = !dark;
     setDark(next);
-    document.documentElement.setAttribute("data-theme", next ? "dark" : "light");
+    document.documentElement.setAttribute(
+      "data-theme",
+      next ? "dark" : "light",
+    );
     try {
       localStorage.setItem("telt-theme", next ? "dark" : "light");
     } catch {
@@ -28,14 +31,18 @@ export default function Nav() {
         </a>
       </div>
       <div className="nav-links">
-        <a href="/#proof">Proof</a>
-        <a href="/#connect">Connect</a>
+        <a href="/#workflow">How it works</a>
+        <a href="/#demo">Demo</a>
         <a href="/verify">Verify</a>
         <a href="https://github.com/Iziedking/kertel">Source</a>
       </div>
       <div className="nav-right">
-        <button className="theme-toggle" onClick={toggle} aria-label="Toggle theme">
-          {dark ? "Light" : "Dark"}
+        <button
+          className="theme-toggle"
+          onClick={toggle}
+          aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
+        >
+          {dark ? "☀" : "◐"}
         </button>
       </div>
     </nav>

@@ -30,6 +30,9 @@ import * as fp from "@telt/core/money";
 import type { Instant } from "@telt/core/domain";
 
 export type ProposalRow = {
+  readonly researchRunId?: string | null;
+  readonly decisionId?: string | null;
+  readonly decisionDigest?: string | null;
   readonly id: string;
   readonly senderHash: string;
   readonly symbol: string;
@@ -314,6 +317,9 @@ function nullableNumber(row: Record<string, unknown>, key: string): number | nul
 
 function toProposal(row: Record<string, unknown>): ProposalRow {
   return {
+    researchRunId: nullableText(row, "research_run_id"),
+    decisionId: nullableText(row, "decision_id"),
+    decisionDigest: nullableText(row, "decision_digest"),
     id: text(row, "id"),
     senderHash: text(row, "sender_hash"),
     symbol: text(row, "symbol"),
@@ -410,6 +416,7 @@ export function tradeStore(db: DatabaseSync): TradeStore {
         row.expiresAt,
         row.status,
       );
+      db.prepare("UPDATE proposals SET research_run_id = ?, decision_id = ?, decision_digest = ? WHERE id = ?").run(row.researchRunId ?? null, row.decisionId ?? null, row.decisionDigest ?? null, row.id);
     },
 
     findProposal(id) {

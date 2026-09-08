@@ -219,6 +219,7 @@ export type OrderType = "MARKET" | "LIMIT";
  * makes "confirm KTL-4821" mean one specific thing.
  */
 export type TradeProposal = {
+  readonly decisionDigest?: string;
   readonly id: ProposalId;
   readonly researchRunId: ResearchRunId | null;
   readonly senderIdHash: SenderIdHash;

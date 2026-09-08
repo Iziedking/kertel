@@ -44,7 +44,7 @@ export async function verifyAttestation(text: string): Promise<VerifyResult> {
   const signatureValid = checks.find((check) => check.name === "signature")?.status === "pass";
 
   const lines: string[] = [];
-  lines.push(signatureValid ? "Attestation verified" : "ATTESTATION FAILED");
+  lines.push(signatureValid ? "Signature verified" : "ATTESTATION FAILED");
   lines.push("");
   lines.push(`  Symbol:     ${signed.attestation.symbol}`);
   lines.push(`  Concluded:  ${signed.attestation.decision}`);
@@ -72,20 +72,15 @@ export async function verifyAttestation(text: string): Promise<VerifyResult> {
     }
     lines.push("");
     lines.push(
-      `  On each one, confirm the sender is ${signed.attestation.agent.toLowerCase()}, that the`,
+      `  On each one, confirm the token-transfer payer is ${signed.attestation.agent.toLowerCase()}, that the`,
     );
-    lines.push("  amount matches, and that the block time is BEFORE any order above.");
+    lines.push("  token, merchant and amount match. A payment time does not timestamp this decision.");
   }
 
   lines.push("");
   if (signatureValid) {
-    lines.push(
-      "What this proves: this agent held this conclusion over this evidence, and paid",
-    );
-    lines.push(
-      "for it with its own money before acting. What it does not prove: that the",
-    );
-    lines.push("conclusion was correct. A well-evidenced trade can still lose.");
+    lines.push("This verifies the signature over the displayed claims. It does not verify payment,");
+    lines.push("provider data, agent identity, the order, or that the decision preceded a trade.");
   } else {
     lines.push(
       "Do not act on this. The signature does not match the agent it names, which means",

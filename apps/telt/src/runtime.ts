@@ -1,3 +1,5 @@
+import { recordDecision } from "./decisions.js";
+import type { DecisionInput } from "./infra/research-store.js";
 /**
  * The composition root.
  *
@@ -30,9 +32,16 @@ import { hostname } from "node:os";
 import { runPlan } from "@telt/core/research";
 import type { PlannerState, ResearchGoal } from "@telt/core/research";
 import { evaluateSymbol } from "@telt/core/policy";
-import { renderRefusalReceipt, renderResearchReceipt } from "@telt/core/receipts";
+import {
+  renderRefusalReceipt,
+  renderResearchReceipt,
+} from "@telt/core/receipts";
 import type { ReceiptPayment } from "@telt/core/receipts";
-import { createFixtureX402Client, createLiveX402Client, createSigner } from "@telt/x402";
+import {
+  createFixtureX402Client,
+  createLiveX402Client,
+  createSigner,
+} from "@telt/x402";
 import type { FixtureExchange, X402Client } from "@telt/x402";
 import {
   assertRegistryCoversRecipes,
@@ -56,7 +65,13 @@ import { loadFixtureExchanges } from "./infra/fixtures.js";
 import type { BinanceClient } from "./infra/binance.js";
 import { cancel, confirm, propose, reconcile } from "./trading.js";
 import type { TradeOutcome, TradingDeps } from "./trading.js";
-import { armPlan, cancelPlan, describeJournal, describePositions, planExit } from "./plans.js";
+import {
+  armPlan,
+  cancelPlan,
+  describeJournal,
+  describePositions,
+  planExit,
+} from "./plans.js";
 import type { PlanDeps, PlanOutcome, PlanRequest } from "./plans.js";
 import { createMonitor, sweep } from "./monitor.js";
 import type { Monitor, MonitorDeps, SweepResult } from "./monitor.js";
@@ -67,7 +82,11 @@ import type { HuntDeps, HuntOutcome } from "./hunt.js";
 import { createModelClient } from "./infra/model.js";
 import { describeBudget } from "@telt/core/autonomy";
 import { rankMovers, renderScan } from "@telt/core/research";
-import { renderAttestationBlock, serialize } from "@telt/core/attest";
+import {
+  deserialize,
+  renderAttestationBlock,
+  serialize,
+} from "@telt/core/attest";
 import { formatInstant } from "@telt/core/domain";
 import type { WatchDeps } from "./watch.js";
 import { deriveLessons, memoryDigest, renderReview } from "./review.js";
@@ -106,7 +125,10 @@ export type Runtime = {
   closeFutures(symbol: string, fractionBps: number): Promise<FuturesOutcome>;
   describeFutures(symbols: readonly string[]): Promise<string>;
   research(input: ResearchRequest): Promise<ResearchResult>;
+  decide(input: DecisionInput): ReturnType<typeof recordDecision>;
   propose(input: {
+    readonly researchRunId?: string;
+    readonly decisionId?: string;
     readonly symbol: string;
     readonly side: "BUY" | "SELL";
     readonly notional: string;
@@ -139,7 +161,9 @@ export type Runtime = {
   learn(lessons: readonly { symbol: string; text: string }[]): string;
   /** The working state, as text to carry to another machine. */
   snapshot(): string;
-  restore(text: string): Promise<{ readonly ok: boolean; readonly body: string }>;
+  restore(
+    text: string,
+  ): Promise<{ readonly ok: boolean; readonly body: string }>;
   /** One pass over every armed plan, right now. */
   checkPositions(): Promise<SweepResult>;
   readonly monitor: Monitor;
@@ -152,6 +176,7 @@ export type ResearchRequest = {
 };
 
 export type ResearchResult = {
+  readonly researchRunId?: string;
   readonly ok: boolean;
   readonly body: string;
   readonly spent: string;
@@ -199,7 +224,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const { config } = options;
   const clock = options.clock ?? systemClock();
   const log =
-    options.log ?? createLogger({ level: config.logLevel }).child({ component: "telt" });
+    options.log ??
+    createLogger({ level: config.logLevel }).child({ component: "telt" });
   const store = options.store ?? openStore(`${config.dataDir}/telt.sqlite`);
 
   // A recipe step with no adapter is a step the planner will select and then
@@ -207,7 +233,10 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   // Failing at construction turns a wasted spend into a startup error.
   assertRegistryCoversRecipes();
 
-  const fixtures = options.exchanges === undefined ? loadFixtureExchanges() : { exchanges: {}, problem: null };
+  const fixtures =
+    options.exchanges === undefined
+      ? loadFixtureExchanges()
+      : { exchanges: {}, problem: null };
   if (fixtures.problem !== null && config.mode === "fixture") {
     log.warn("fixture data unavailable", { problem: fixtures.problem });
   }
@@ -222,7 +251,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       ? createLiveX402Client({
           privateKey: config.x402PrivateKey,
           hash: sha256,
-          ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+          ...(options.fetchImpl === undefined
+            ? {}
+            : { fetchImpl: options.fetchImpl }),
         })
       : createFixtureX402Client({
           // Without the saved challenges, fixture mode can read the free venue
@@ -236,14 +267,20 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         });
 
   const ownerHash =
-    config.ownerWhatsApp === null ? null : hashSender(config.ownerWhatsApp, config.senderSalt);
+    config.ownerWhatsApp === null
+      ? null
+      : hashSender(config.ownerWhatsApp, config.senderSalt);
 
   // Agent OS first. Its orders land in the Agentic sub-account, which has no
   // withdrawal scope to grant, and that is a stronger guarantee than an API key
   // with the withdrawal box unticked. The API key remains the fallback for when
   // the thirty-day token has lapsed and nobody has signed in again.
   const executionRail: "agent-os" | "api-key" | "none" =
-    config.binanceMcpToken !== null ? "agent-os" : config.binanceApiKey !== null ? "api-key" : "none";
+    config.binanceMcpToken !== null
+      ? "agent-os"
+      : config.binanceApiKey !== null
+        ? "api-key"
+        : "none";
 
   // One authenticated session serves both products. Futures is only reachable
   // through Agent OS: the REST fallback would need its own signed futures
@@ -253,12 +290,15 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       ? createAgentOs({
           token: config.binanceMcpToken as string,
           url: config.binanceMcpUrl,
-          ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+          ...(options.fetchImpl === undefined
+            ? {}
+            : { fetchImpl: options.fetchImpl }),
         })
       : null;
 
   const futures: FuturesClient | null =
-    options.futures ?? (agentOs === null ? null : createFuturesClient(agentOs.call));
+    options.futures ??
+    (agentOs === null ? null : createFuturesClient(agentOs.call));
 
   const binance =
     options.binance ??
@@ -267,46 +307,49 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       : createBinanceClient({
           apiKey: config.binanceApiKey ?? undefined,
           apiSecret: config.binanceApiSecret ?? undefined,
-          ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+          ...(options.fetchImpl === undefined
+            ? {}
+            : { fetchImpl: options.fetchImpl }),
         }));
 
   const tradingDeps: TradingDeps = {
-    /**
-     * The proof that this order followed from evidence.
-     *
-     * Reuses the provenance of the most recent research on the symbol, so the
-     * order is signed against the evidence that actually justified it rather
-     * than against a fresh digest of nothing. With no such research the
-     * attestation still signs the order — it then proves who traded and when,
-     * and says plainly that no paid evidence stands behind it.
-     */
+    // Select only the run bound into the confirmed proposal.
     attest:
       signer === null
         ? null
         : async (input) => {
-            const recent = store.attestations.recent(1)[0] ?? null;
+            const run = input.researchRunId
+              ? store.research.find(input.researchRunId)
+              : null;
+            const researchReceipt = run ? deserialize(run.body) : null;
             const signed = await signer.sign({
               symbol: input.symbol,
               goal: "trade",
               at: formatInstant(clock.now()),
               agent: signer.address,
-              provenance: recent?.provenance ?? "none",
-              payments: [],
-              spent: fp.parse("0.00"),
+              provenance: input.evidenceDigest,
+              payments: researchReceipt?.attestation.payments ?? [],
+              spent: researchReceipt?.attestation.spent ?? fp.parse("0.00"),
+              binding: {
+                researchRunId: input.researchRunId ?? "none",
+                decisionDigest: input.decisionDigest ?? "none",
+                proposalHash: input.proposalHash,
+              },
               decision: input.side,
               order: input.orderRef,
             });
-            if (recent !== null) {
-              store.attestations.attachOrder(recent.provenance, input.orderRef);
+            if (run !== null) {
+              store.attestations.attachOrder(run.provenance, input.orderRef);
             }
-            return renderAttestationBlock(signed);
+            return `${renderAttestationBlock(signed)}\nResearch run: ${input.researchRunId ?? "none (direct order)"}\nDecision digest: ${input.decisionDigest ?? "none"}\nConfirmed proposal: ${input.proposalHash}\nThe v2 signature binds the research run, decision digest and confirmed proposal. It does not independently establish provider origin, settlement, order execution or chronology.`;
           },
     policy: config.policy,
     mode: config.mode,
     store,
     binance,
     hash: sha256,
-    random: options.random ?? ((count: number) => new Uint8Array(randomBytes(count))),
+    random:
+      options.random ?? ((count: number) => new Uint8Array(randomBytes(count))),
     now: () => clock.now(),
     newId: options.newId ?? ((prefix: string) => `${prefix}-${randomUUID()}`),
     ownerHash: ownerHash as SenderIdHash | null,
@@ -350,7 +393,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const model = createModelClient({
     apiKey: config.anthropicApiKey,
     model: config.model ?? "claude-sonnet-5",
-    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+    ...(options.fetchImpl === undefined
+      ? {}
+      : { fetchImpl: options.fetchImpl }),
   });
 
   const huntDeps: HuntDeps = {
@@ -383,11 +428,16 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         side: "BUY",
         notional: fp.format(notional),
       });
-      if (!proposed.ok) return { ok: false, body: proposed.body, orderRef: null };
+      if (!proposed.ok)
+        return { ok: false, body: proposed.body, orderRef: null };
 
       const code = /KTL-[A-Z0-9]+/.exec(proposed.body)?.[0];
       if (code === undefined) {
-        return { ok: false, body: "Telt could not read back the code it just issued.", orderRef: null };
+        return {
+          ok: false,
+          body: "Telt could not read back the code it just issued.",
+          orderRef: null,
+        };
       }
 
       const filled = await confirm(tradingDeps, code);
@@ -418,7 +468,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       if (!plan.ok) return { ok: false, body: plan.body };
 
       const code = /KTL-[A-Z0-9]+/.exec(plan.body)?.[0];
-      if (code === undefined) return { ok: false, body: "Telt could not read back the plan code." };
+      if (code === undefined)
+        return { ok: false, body: "Telt could not read back the plan code." };
 
       const armed = await armPlan(planDeps, code);
       return { ok: armed.ok, body: armed.body };
@@ -435,13 +486,19 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         notional: fp.format(fp.trim(back, 2)),
       });
       if (!sell.ok) {
-        log.error("could not unwind an unprotected autonomous entry", { symbol, why: sell.refusalCode });
+        log.error("could not unwind an unprotected autonomous entry", {
+          symbol,
+          why: sell.refusalCode,
+        });
         return false;
       }
       const code = /KTL-[A-Z0-9]+/.exec(sell.body)?.[0];
       if (code === undefined) return false;
       const done = await confirm(tradingDeps, code);
-      log.warn("unwound an unprotected autonomous entry", { symbol, ok: done.ok });
+      log.warn("unwound an unprotected autonomous entry", {
+        symbol,
+        ok: done.ok,
+      });
       return done.ok;
     },
   };
@@ -455,7 +512,10 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     // explicitly allowed symbols, plus the two liquid defaults — because the
     // position most worth finding is the one nobody planned an exit for, and
     // that one is by definition absent from the mandate table.
-    futuresSymbols: futuresWatchlist(store, config.policy.trading.allowedSymbols),
+    futuresSymbols: futuresWatchlist(
+      store,
+      config.policy.trading.allowedSymbols,
+    ),
     now: () => clock.now(),
     quoteAsset: "USDT",
     allowedSymbols: config.policy.trading.allowedSymbols,
@@ -563,7 +623,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       spentTodayBefore: spentToday,
       newEvidenceId: nextEvidenceId,
       newPaymentAttemptId: nextAttemptId,
-      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      ...(options.fetchImpl === undefined
+        ? {}
+        : { fetchImpl: options.fetchImpl }),
     });
 
     const state: PlannerState = {
@@ -611,7 +673,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         `a payment was signed and never confirmed (${unresolved}); reconcile it before resuming`,
         now,
       );
-      log.error("unresolved payment, kill switch engaged", { attemptId: unresolved });
+      log.error("unresolved payment, kill switch engaged", {
+        attemptId: unresolved,
+      });
     }
 
     const payments: ReceiptPayment[] = executor.payments().map((payment) => ({
@@ -701,7 +765,34 @@ export function createRuntime(options: RuntimeOptions): Runtime {
 ${renderAttestationBlock(signed)}`;
     }
 
-    return { ok: true, body, spent: fp.format(outcome.spent), refusalCode: null };
+    const completedAt = clock.now();
+    const valid = outcome.observations.filter(
+      (o) => o.status === "valid" && o.freshnessDeadline > completedAt,
+    );
+    const runId = tradingDeps.newId("research");
+    store.research.save({
+      id: runId,
+      symbol,
+      mode: config.mode,
+      goal: request.goal,
+      createdAt: completedAt,
+      expiresAt: Math.min(
+        completedAt + 120_000,
+        ...valid.map((o) => o.freshnessDeadline),
+      ),
+      policyVersion: config.policy.version,
+      provenance: receipt.provenanceDigest,
+      evidenceIds: valid.map((o) => o.id),
+      body,
+    });
+    body += `\nResearch run: ${runId}\nEvidence IDs: ${valid.map((o) => o.id).join(", ")}\nUse telt_decide to record a conclusion against this exact run.`;
+    return {
+      ok: true,
+      body,
+      researchRunId: runId,
+      spent: fp.format(outcome.spent),
+      refusalCode: null,
+    };
   }
 
   function refused(
@@ -739,7 +830,9 @@ ${renderAttestationBlock(signed)}`;
     confirmFutures: async (code) =>
       futuresDeps === null ? noFutures : confirmFutures(futuresDeps, code),
     closeFutures: async (symbol, fractionBps) =>
-      futuresDeps === null ? noFutures : closeFutures(futuresDeps, { symbol, fractionBps }),
+      futuresDeps === null
+        ? noFutures
+        : closeFutures(futuresDeps, { symbol, fractionBps }),
     describeFutures: async (symbols) =>
       futuresDeps === null
         ? noFutures.body
@@ -747,15 +840,25 @@ ${renderAttestationBlock(signed)}`;
     mode: config.mode,
     ownerHash,
     research,
+    decide: (input) => recordDecision(store.research, input, clock.now()),
     propose: (input) => propose(tradingDeps, input),
     planExit: (request) => planExit(planDeps, request),
     armPlan: (code) => armPlan(planDeps, code),
     positions: () => describePositions(planDeps),
     cancelPlan: (id) => cancelPlan(planDeps, id),
-    journal: (limit, withEvidence) => describeJournal(planDeps, limit, withEvidence),
+    journal: (limit, withEvidence) =>
+      describeJournal(planDeps, limit, withEvidence),
     watch: (deep) => watchHoldings(watchDeps, { deep }),
     verify: async (text: string) => (await verifyAttestation(text)).body,
-    hunt: async () => hunt(huntDeps),
+    hunt: async () =>
+      config.mode === "live"
+        ? {
+            acted: false,
+            ok: false,
+            body: "Discretionary live entries are paused: account-wide loss and exposure accounting is unavailable. Research and explicitly confirmed orders remain available.",
+            refusalCode: "EXECUTION_ADAPTER_UNAVAILABLE",
+          }
+        : hunt(huntDeps),
 
     autonomy: {
       arm: ({ granted, perTrade, hours }) => {
@@ -790,7 +893,8 @@ ${renderAttestationBlock(signed)}`;
     review: (limit) => renderReview(reviewDeps, store.mandates.outcomes(limit)),
     snapshot: () => snapshot(portableDeps),
     restore: (text) => restore(portableDeps, text),
-    memoryDigest: (limit) => memoryDigest(reviewDeps, store.mandates.outcomes(limit)),
+    memoryDigest: (limit) =>
+      memoryDigest(reviewDeps, store.mandates.outcomes(limit)),
     learn: (lessons) => {
       const now = clock.now();
       let stored = 0;
@@ -812,7 +916,10 @@ ${renderAttestationBlock(signed)}`;
       }
       // Whatever Telt has worked out for itself is folded in at the same
       // time, so both kinds of lesson reach the next plan together.
-      const derived: readonly Lesson[] = deriveLessons(store.mandates.outcomes(200), now);
+      const derived: readonly Lesson[] = deriveLessons(
+        store.mandates.outcomes(200),
+        now,
+      );
       for (const lesson of derived) {
         store.mandates.learn(lesson);
       }
@@ -851,7 +958,10 @@ export function todayKey(runtime: Runtime): string {
  * thing: everything it has ever managed on futures, everything the operator
  * named, and the two pairs almost every account touches.
  */
-function futuresWatchlist(store: Store, allowed: readonly Symbol_[]): readonly Symbol_[] {
+function futuresWatchlist(
+  store: Store,
+  allowed: readonly Symbol_[],
+): readonly Symbol_[] {
   const seen = new Set<string>(["ETHUSDT", "BTCUSDT"]);
   for (const symbol of allowed) {
     if (symbol !== ("*" as Symbol_)) seen.add(symbol);

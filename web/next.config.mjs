@@ -1,5 +1,2 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-};
-export default nextConfig;
+import { fileURLToPath } from "node:url";
+export default { reactStrictMode: true, outputFileTracingRoot: fileURLToPath(new URL(".", import.meta.url)) };

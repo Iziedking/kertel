@@ -89,7 +89,8 @@ export function statusTool(runtime: Runtime): AgentTool {
       lines.push(
         `  Max per trade:   ${fp.format(config.policy.trading.maxTradeNotional)} (exchange minimum is 5.00, so the usable window is narrow)`,
       );
-      lines.push(`  Max daily loss:  ${fp.format(config.policy.trading.maxDailyLoss)}`);
+      lines.push("  Daily loss / total exposure: unavailable, not enforced as account-wide caps");
+      lines.push("  Discretionary live entries: paused until complete risk accounting is available");
       lines.push(`  Max slippage:    ${String(config.policy.trading.maxSlippageBps)} bps`);
       lines.push("");
 

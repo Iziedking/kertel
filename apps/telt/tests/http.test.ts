@@ -118,7 +118,7 @@ describe("what anyone can do", () => {
       ].join("\n"),
     });
 
-    expect(body).toContain("Attestation verified");
+    expect(body).toContain("Signature verified");
     expect(body).toContain("0xd2f6393c6a916acb98057a5920952084b838cfd1");
   });
 

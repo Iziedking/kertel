@@ -1,3 +1,4 @@
+import { decisionDigest } from "./decisions.js";
 /**
  * The confirmation spine: propose, confirm, cancel, reconcile.
  *
@@ -32,6 +33,7 @@ import type {
   MarketSnapshot,
   OperationId,
   ProposalId,
+  ResearchRunId,
   Refusal,
   Result,
   SenderIdHash,
@@ -39,7 +41,11 @@ import type {
   Symbol_,
   TradeProposal,
 } from "@telt/core/domain";
-import { evaluateConfirmation, evaluateExecution, evaluateProposal } from "@telt/core/policy";
+import {
+  evaluateConfirmation,
+  evaluateExecution,
+  evaluateProposal,
+} from "@telt/core/policy";
 import type { Policy } from "@telt/core/policy";
 import {
   hashConfirmationCode,
@@ -47,7 +53,11 @@ import {
   normalizeConfirmationCode,
 } from "@telt/core/confirmation";
 import { hashProposal, idempotencyKeyFor } from "@telt/core/proposals";
-import { DEFAULT_FEE_BPS, sizeFromNotional, slippageBound } from "@telt/core/proposals";
+import {
+  DEFAULT_FEE_BPS,
+  sizeFromNotional,
+  slippageBound,
+} from "@telt/core/proposals";
 import { renderProposal, renderRefusalReceipt } from "@telt/core/receipts";
 
 import { clientOrderIdFrom } from "./infra/binance.js";
@@ -77,6 +87,10 @@ export type TradingDeps = {
         readonly symbol: string;
         readonly side: string;
         readonly orderRef: string;
+        readonly researchRunId: string | null;
+        readonly evidenceDigest: string;
+        readonly decisionDigest: string | undefined;
+        readonly proposalHash: string;
       }) => Promise<string | null>)
     | null;
 };
@@ -87,7 +101,11 @@ export type TradeOutcome = {
   readonly refusalCode: string | null;
 };
 
-function refusalOf(deps: TradingDeps, refusal: Refusal, symbol: Symbol_ | null): TradeOutcome {
+function refusalOf(
+  deps: TradingDeps,
+  refusal: Refusal,
+  symbol: Symbol_ | null,
+): TradeOutcome {
   return {
     ok: false,
     refusalCode: refusal.code,
@@ -105,7 +123,8 @@ function refusalOf(deps: TradingDeps, refusal: Refusal, symbol: Symbol_ | null):
 function proposalFromRow(row: ProposalRow): TradeProposal {
   return {
     id: row.id as ProposalId,
-    researchRunId: null,
+    researchRunId: (row.researchRunId ?? null) as ResearchRunId | null,
+    ...(row.decisionDigest ? { decisionDigest: row.decisionDigest } : {}),
     senderIdHash: row.senderHash as SenderIdHash,
     symbol: row.symbol as Symbol_,
     side: row.side as TradeProposal["side"],
@@ -179,20 +198,32 @@ async function marketContext(
   const account = await deps.binance.account();
   if (!account.ok) return account;
 
-  return ok({ filters: filters.value, market: market.value, account: account.value });
+  return ok({
+    filters: filters.value,
+    market: market.value,
+    account: account.value,
+  });
 }
 
 export async function propose(
   deps: TradingDeps,
-  input: { readonly symbol: string; readonly side: "BUY" | "SELL"; readonly notional: string },
+  input: {
+    readonly symbol: string;
+    readonly side: "BUY" | "SELL";
+    readonly notional: string;
+    readonly researchRunId?: string;
+    readonly decisionId?: string;
+  },
 ): Promise<TradeOutcome> {
   const symbol = input.symbol.trim().toUpperCase() as Symbol_;
 
   if (deps.ownerHash === null) {
     return refusalOf(
       deps,
-      refuse("SENDER_NOT_ALLOWED", "Telt has no configured owner, so it will not prepare an order.")
-        .error,
+      refuse(
+        "SENDER_NOT_ALLOWED",
+        "Telt has no configured owner, so it will not prepare an order.",
+      ).error,
       symbol,
     );
   }
@@ -223,8 +254,59 @@ export async function propose(
   if (!/^\d+(\.\d+)?$/.test(input.notional.trim())) {
     return refusalOf(
       deps,
-      refuse("AMOUNT_NOT_UNDERSTOOD", `Telt could not read ${JSON.stringify(input.notional)} as an amount.`)
-        .error,
+      refuse(
+        "AMOUNT_NOT_UNDERSTOOD",
+        `Telt could not read ${JSON.stringify(input.notional)} as an amount.`,
+      ).error,
+      symbol,
+    );
+  }
+  const decision = input.decisionId
+    ? deps.store.research.findDecision(input.decisionId)
+    : null;
+  const runId = input.researchRunId ?? decision?.researchRunId;
+  const run = runId ? deps.store.research.find(runId) : null;
+  if (
+    (input.decisionId && !decision) ||
+    (runId && !run) ||
+    (decision &&
+      (decision.researchRunId !== runId ||
+        decision.digest !== decisionDigest(decision)))
+  ) {
+    return refusalOf(
+      deps,
+      refuse(
+        "INSUFFICIENT_EVIDENCE",
+        "The decision or research reference does not match a stored run.",
+      ).error,
+      symbol,
+    );
+  }
+  if (
+    run &&
+    (run.symbol !== symbol ||
+      run.mode !== deps.mode ||
+      run.policyVersion !== deps.policy.version ||
+      deps.now() >= run.expiresAt ||
+      deps.now() < run.createdAt)
+  ) {
+    return refusalOf(
+      deps,
+      refuse(
+        "INSUFFICIENT_EVIDENCE",
+        "Research is stale or belongs to another symbol, mode or policy. Research again.",
+      ).error,
+      symbol,
+    );
+  }
+  if (
+    decision &&
+    decision.recommendation !== "BUY_CANDIDATE" &&
+    input.side === "BUY"
+  ) {
+    return refusalOf(
+      deps,
+      refuse("NO_TRADE_RECOMMENDED", decision.summary).error,
       symbol,
     );
   }
@@ -252,7 +334,7 @@ export async function propose(
   // A buy fills at the ask, so that is the price it is sized from.
   const sized = sizeFromNotional({
     notional: requested,
-    price: market.bestAsk,
+    price: input.side === "BUY" ? market.bestAsk : market.bestBid,
     filters,
     feeBps: DEFAULT_FEE_BPS,
   });
@@ -263,7 +345,7 @@ export async function propose(
     side: input.side,
     orderType: "MARKET" as const,
     quantity: sized.value.quantity,
-    referencePrice: market.bestAsk,
+    referencePrice: input.side === "BUY" ? market.bestAsk : market.bestBid,
     estimatedNotional: sized.value.estimatedNotional,
     estimatedFee: sized.value.estimatedFee,
     maxSlippageBps: deps.policy.trading.maxSlippageBps,
@@ -276,8 +358,8 @@ export async function propose(
     filters,
     market,
     account,
-    realisedLossToday: fp.parse("0.00"),
-    openExposure: fp.parse("0.00"),
+    realisedLossToday: null,
+    openExposure: null,
     now,
   });
   if (!verdict.ok) return refusalOf(deps, verdict.error, symbol);
@@ -285,7 +367,8 @@ export async function propose(
   const proposalId = deps.newId("prop") as ProposalId;
   const proposal: TradeProposal = {
     id: proposalId,
-    researchRunId: null,
+    researchRunId: (run?.id ?? null) as ResearchRunId | null,
+    ...(decision ? { decisionDigest: decision.digest } : {}),
     senderIdHash: deps.ownerHash,
     symbol,
     side: input.side,
@@ -296,7 +379,7 @@ export async function propose(
     estimatedNotional: candidate.estimatedNotional,
     estimatedFee: candidate.estimatedFee,
     maxSlippageBps: candidate.maxSlippageBps,
-    evidenceDigest: "none",
+    evidenceDigest: run?.provenance ?? "none",
     policyVersion: deps.policy.version,
     mode: deps.mode,
     createdAt: now,
@@ -316,6 +399,9 @@ export async function propose(
 
   deps.store.trades.saveProposal({
     id: proposalId,
+    researchRunId: run?.id ?? null,
+    decisionId: decision?.id ?? null,
+    decisionDigest: decision?.digest ?? null,
     senderHash: deps.ownerHash,
     symbol,
     side: proposal.side,
@@ -370,6 +456,13 @@ export async function propose(
       code: issued.code,
       expiresAt: proposal.expiresAt,
       evidenceSummary: [
+        run
+          ? `Research run: ${run.id}; evidence: ${run.provenance}`
+          : "Direct user order: no research conclusion is claimed.",
+        decision
+          ? `Decision: ${decision.id}; ${decision.summary}`
+          : "No model decision is attached.",
+        "Account-wide daily loss and total exposure accounting are unavailable; only per-order and available-balance checks apply.",
         `Binance book: bid ${fp.format(fp.trim(market.bestBid, 2))} / ask ${fp.format(fp.trim(market.bestAsk, 2))}`,
         market.averagePrice === null
           ? `No venue average available; the exchange minimum was checked against the last price only.`
@@ -380,13 +473,19 @@ export async function propose(
   };
 }
 
-export async function confirm(deps: TradingDeps, code: string): Promise<TradeOutcome> {
-  const now = deps.now();
+export async function confirm(
+  deps: TradingDeps,
+  code: string,
+): Promise<TradeOutcome> {
+  let now = deps.now();
 
   if (deps.ownerHash === null) {
     return refusalOf(
       deps,
-      refuse("SENDER_NOT_ALLOWED", "Telt has no configured owner, so it will not execute.").error,
+      refuse(
+        "SENDER_NOT_ALLOWED",
+        "Telt has no configured owner, so it will not execute.",
+      ).error,
       null,
     );
   }
@@ -395,7 +494,10 @@ export async function confirm(deps: TradingDeps, code: string): Promise<TradeOut
   if (normalized === null) {
     return refusalOf(
       deps,
-      refuse("TOKEN_NOT_FOUND", `${JSON.stringify(code)} is not a Telt confirmation code.`).error,
+      refuse(
+        "TOKEN_NOT_FOUND",
+        `${JSON.stringify(code)} is not a Telt confirmation code.`,
+      ).error,
       null,
     );
   }
@@ -404,7 +506,8 @@ export async function confirm(deps: TradingDeps, code: string): Promise<TradeOut
   if (row === null) {
     return refusalOf(
       deps,
-      refuse("TOKEN_NOT_FOUND", "There is no order waiting for confirmation.").error,
+      refuse("TOKEN_NOT_FOUND", "There is no order waiting for confirmation.")
+        .error,
       null,
     );
   }
@@ -473,12 +576,102 @@ export async function confirm(deps: TradingDeps, code: string): Promise<TradeOut
     );
   }
 
+  const fresh = await marketContext(deps, symbol);
+  if (!fresh.ok) return refusalOf(deps, fresh.error, symbol);
+  now = deps.now();
+  if (
+    now >= proposal.expiresAt ||
+    proposal.policyVersion !== deps.policy.version
+  ) {
+    return refusalOf(
+      deps,
+      refuse(
+        "MARKET_DATA_STALE",
+        "The proposal expired or policy changed while checking the market. Propose again.",
+      ).error,
+      symbol,
+    );
+  }
+  const boundRun = proposal.researchRunId
+    ? deps.store.research.find(proposal.researchRunId)
+    : null;
+  if (
+    proposal.researchRunId &&
+    (!boundRun ||
+      now >= boundRun.expiresAt ||
+      boundRun.provenance !== proposal.evidenceDigest)
+  ) {
+    return refusalOf(
+      deps,
+      refuse(
+        "INSUFFICIENT_EVIDENCE",
+        "The bound research is no longer fresh. Research and propose again.",
+      ).error,
+      symbol,
+    );
+  }
+  const accountAge = now - fresh.value.account.observedAt;
+  if (
+    !fresh.value.account.canTradeSpot ||
+    accountAge < 0 ||
+    accountAge > Number(deps.policy.trading.marketDataMaxAge) * 1000
+  ) {
+    return refusalOf(
+      deps,
+      refuse(
+        "MARKET_DATA_STALE",
+        "The account cannot trade or its balance snapshot is stale.",
+      ).error,
+      symbol,
+    );
+  }
+  const currentPrice =
+    proposal.side === "BUY"
+      ? fresh.value.market.bestAsk
+      : fresh.value.market.bestBid;
+  const worstPrice = slippageBound(proposal);
+  if (
+    (proposal.side === "BUY" && fp.greaterThan(currentPrice, worstPrice)) ||
+    (proposal.side === "SELL" && fp.greaterThan(worstPrice, currentPrice))
+  ) {
+    return refusalOf(
+      deps,
+      refuse(
+        "SLIPPAGE_ABOVE_CAP",
+        "The book moved outside the approved price tolerance. Propose again.",
+      ).error,
+      symbol,
+    );
+  }
+  const freshVerdict = evaluateProposal({
+    policy: deps.policy,
+    candidate: {
+      ...proposal,
+      referencePrice: currentPrice,
+      estimatedNotional: fp.multiply(proposal.quantity, currentPrice),
+    },
+    thesis: null,
+    ...fresh.value,
+    realisedLossToday: null,
+    openExposure: null,
+    now,
+  });
+  if (!freshVerdict.ok) return refusalOf(deps, freshVerdict.error, symbol);
+  const finalGate = evaluateExecution({
+    policy: deps.policy,
+    safety: deps.store.safetyState(),
+    existingOperation: null,
+    now,
+  });
+  if (!finalGate.ok) return refusalOf(deps, finalGate.error, symbol);
+
   // The code is spent here, before anything is sent. A code that survives a
   // failed send is a code somebody can use again on a changed market.
   if (!deps.store.trades.consumeToken(tokenHash, now)) {
     return refusalOf(
       deps,
-      refuse("TOKEN_ALREADY_CONSUMED", "That code has already been used.").error,
+      refuse("TOKEN_ALREADY_CONSUMED", "That code has already been used.")
+        .error,
       symbol,
     );
   }
@@ -502,7 +695,10 @@ export async function confirm(deps: TradingDeps, code: string): Promise<TradeOut
   if (!claimed) {
     return refusalOf(
       deps,
-      refuse("DUPLICATE_IDEMPOTENCY_KEY", "That order has already been submitted once.").error,
+      refuse(
+        "DUPLICATE_IDEMPOTENCY_KEY",
+        "That order has already been submitted once.",
+      ).error,
       symbol,
     );
   }
@@ -532,7 +728,10 @@ export async function confirm(deps: TradingDeps, code: string): Promise<TradeOut
       reconciledAt: unknown ? null : now,
       failureCode: placed.error.code,
     });
-    deps.store.trades.setProposalStatus(proposal.id, unknown ? "executing" : "rejected");
+    deps.store.trades.setProposalStatus(
+      proposal.id,
+      unknown ? "executing" : "rejected",
+    );
 
     if (unknown) {
       deps.store.engageKillSwitch(
@@ -552,7 +751,8 @@ export async function confirm(deps: TradingDeps, code: string): Promise<TradeOut
     exchangeOrderRef: order.exchangeOrderRef,
     status: order.status,
     filledQuantity: fp.format(order.filledQuantity),
-    averagePrice: order.averagePrice === null ? null : fp.format(order.averagePrice),
+    averagePrice:
+      order.averagePrice === null ? null : fp.format(order.averagePrice),
     feePaid: order.feePaid === null ? null : fp.format(order.feePaid),
     submittedAt: now,
     reconciledAt: order.status === "filled" ? now : null,
@@ -566,7 +766,9 @@ export async function confirm(deps: TradingDeps, code: string): Promise<TradeOut
   const lines: string[] = [];
   lines.push(`${proposal.side} ${symbol}: ${order.status}`);
   lines.push("");
-  lines.push(`Filled:      ${fp.format(order.filledQuantity)} ${symbol.replace("USDT", "")}`);
+  lines.push(
+    `Filled:      ${fp.format(order.filledQuantity)} ${symbol.replace("USDT", "")}`,
+  );
   if (order.averagePrice !== null) {
     lines.push(`Avg price:   ${fp.format(order.averagePrice)}`);
     const slipped = fp.subtract(order.averagePrice, proposal.referencePrice);
@@ -587,6 +789,10 @@ export async function confirm(deps: TradingDeps, code: string): Promise<TradeOut
       symbol,
       side: proposal.side,
       orderRef: order.exchangeOrderRef,
+      researchRunId: proposal.researchRunId,
+      evidenceDigest: proposal.evidenceDigest,
+      decisionDigest: proposal.decisionDigest,
+      proposalHash: currentHash,
     });
     if (proof !== null) {
       lines.push("");
@@ -609,7 +815,11 @@ export function cancel(deps: TradingDeps): TradeOutcome {
 
   const row = deps.store.trades.latestPreparedProposal(deps.ownerHash);
   if (row === null) {
-    return { ok: true, refusalCode: null, body: "There is no order waiting. Nothing to cancel." };
+    return {
+      ok: true,
+      refusalCode: null,
+      body: "There is no order waiting. Nothing to cancel.",
+    };
   }
 
   deps.store.trades.revokeTokensFor(row.id);
@@ -652,17 +862,26 @@ export async function reconcile(deps: TradingDeps): Promise<string> {
   for (const operation of pending) {
     const proposal = deps.store.trades.findProposal(operation.proposalId);
     if (proposal === null) {
-      lines.push(`  ${operation.id}: no proposal on record. Left open for a human.`);
+      lines.push(
+        `  ${operation.id}: no proposal on record. Left open for a human.`,
+      );
       continue;
     }
     if (!deps.binance.credentialed) {
-      lines.push(`  ${operation.id}: cannot check, no exchange credentials configured.`);
+      lines.push(
+        `  ${operation.id}: cannot check, no exchange credentials configured.`,
+      );
       continue;
     }
 
-    const found = await deps.binance.findOrder(proposal.symbol as Symbol_, operation.clientOrderId);
+    const found = await deps.binance.findOrder(
+      proposal.symbol as Symbol_,
+      operation.clientOrderId,
+    );
     if (!found.ok) {
-      lines.push(`  ${operation.id}: could not reach the exchange (${found.error.code}).`);
+      lines.push(
+        `  ${operation.id}: could not reach the exchange (${found.error.code}).`,
+      );
       continue;
     }
 
@@ -675,7 +894,9 @@ export async function reconcile(deps: TradingDeps): Promise<string> {
         failureCode: "NEVER_REACHED_EXCHANGE",
       });
       deps.store.trades.setProposalStatus(operation.proposalId, "rejected");
-      lines.push(`  ${operation.id}: never reached the exchange. Closed, nothing was spent.`);
+      lines.push(
+        `  ${operation.id}: never reached the exchange. Closed, nothing was spent.`,
+      );
       continue;
     }
 
@@ -685,9 +906,11 @@ export async function reconcile(deps: TradingDeps): Promise<string> {
       exchangeOrderRef: order.exchangeOrderRef,
       status: order.status,
       filledQuantity: fp.format(order.filledQuantity),
-      averagePrice: order.averagePrice === null ? null : fp.format(order.averagePrice),
+      averagePrice:
+        order.averagePrice === null ? null : fp.format(order.averagePrice),
       feePaid: order.feePaid === null ? null : fp.format(order.feePaid),
-      reconciledAt: order.status === "filled" || order.status === "canceled" ? now : null,
+      reconciledAt:
+        order.status === "filled" || order.status === "canceled" ? now : null,
     });
     deps.store.trades.setProposalStatus(
       operation.proposalId,
@@ -695,7 +918,9 @@ export async function reconcile(deps: TradingDeps): Promise<string> {
     );
     lines.push(
       `  ${operation.id}: ${order.status}, filled ${fp.format(order.filledQuantity)}${
-        order.averagePrice === null ? "" : ` at ${fp.format(order.averagePrice)}`
+        order.averagePrice === null
+          ? ""
+          : ` at ${fp.format(order.averagePrice)}`
       }.`,
     );
   }

@@ -23,11 +23,15 @@
  *    a code, not afterwards.
  */
 
-
 import * as fp from "@telt/core/money";
 import type { FixedPoint } from "@telt/core/money";
 import { formatInstant, refuse } from "@telt/core/domain";
-import type { Instant, Refusal, SenderIdHash, Symbol_ } from "@telt/core/domain";
+import type {
+  Instant,
+  Refusal,
+  SenderIdHash,
+  Symbol_,
+} from "@telt/core/domain";
 import {
   generateConfirmationCode,
   hashConfirmationCode,
@@ -77,6 +81,7 @@ function fail(refusal: Refusal): FuturesOutcome {
 const ORDINARY_DAILY_RANGE_BPS = 500;
 
 type PendingFutures = {
+  readonly owner: Store;
   readonly id: string;
   readonly symbol: Symbol_;
   readonly side: "BUY" | "SELL";
@@ -104,14 +109,18 @@ export async function proposeFutures(
   const symbol = input.symbol.trim().toUpperCase() as Symbol_;
 
   if (deps.ownerHash === null) {
-    return fail(refuse("SENDER_NOT_ALLOWED", "Telt has no configured owner.").error);
+    return fail(
+      refuse("SENDER_NOT_ALLOWED", "Telt has no configured owner.").error,
+    );
   }
 
   const safety = deps.store.safetyState();
   if (safety.killSwitchEngaged) {
     return fail(
-      refuse("KILL_SWITCH_ENGAGED", `Telt is stopped: ${safety.killSwitchReason ?? "no reason recorded"}.`)
-        .error,
+      refuse(
+        "KILL_SWITCH_ENGAGED",
+        `Telt is stopped: ${safety.killSwitchReason ?? "no reason recorded"}.`,
+      ).error,
     );
   }
   if (safety.unreconciledOperations.length > 0) {
@@ -124,7 +133,12 @@ export async function proposeFutures(
   }
 
   if (!Number.isInteger(input.leverage) || input.leverage < 1) {
-    return fail(refuse("AMOUNT_NOT_UNDERSTOOD", "Leverage must be a whole number of at least 1.").error);
+    return fail(
+      refuse(
+        "AMOUNT_NOT_UNDERSTOOD",
+        "Leverage must be a whole number of at least 1.",
+      ).error,
+    );
   }
   if (input.leverage > deps.maxLeverage) {
     return fail(
@@ -137,8 +151,10 @@ export async function proposeFutures(
   }
   if (!/^\d+(\.\d+)?$/.test(input.notional.trim())) {
     return fail(
-      refuse("AMOUNT_NOT_UNDERSTOOD", `Telt could not read ${JSON.stringify(input.notional)} as an amount.`)
-        .error,
+      refuse(
+        "AMOUNT_NOT_UNDERSTOOD",
+        `Telt could not read ${JSON.stringify(input.notional)} as an amount.`,
+      ).error,
     );
   }
 
@@ -188,7 +204,12 @@ export async function proposeFutures(
 
   // Floored to the lot step, then the notional is recomputed from what survived,
   // so the number shown is the number sent.
-  const rawQuantity = fp.divide(notional, mark, filters.stepSize.scale, "floor");
+  const rawQuantity = fp.divide(
+    notional,
+    mark,
+    filters.stepSize.scale,
+    "floor",
+  );
   const quantity = fp.floorToStep(rawQuantity, filters.stepSize);
   if (!fp.isPositive(quantity) || fp.lessThan(quantity, filters.minQuantity)) {
     return fail(
@@ -215,31 +236,23 @@ export async function proposeFutures(
       refuse(
         "NOTIONAL_BELOW_EXCHANGE_MINIMUM",
         `${fp.format(notional)} floors to ${fp.format(quantity)} ${symbol.replace("USDT", "")} at ${fp.format(mark)}, which is a ${fp.format(fp.trim(actualNotional, 2))} position — under Binance's ${fp.format(filters.minNotional)} minimum. The lot step is ${fp.format(filters.stepSize)}, so the next size up is ${fp.format(nextQuantity)}: ask for ${fp.format(fp.trim(nextNotional, 2))} or more.`,
-        { requested: fp.format(notional), wouldSend: fp.format(actualNotional) },
+        {
+          requested: fp.format(notional),
+          wouldSend: fp.format(actualNotional),
+        },
       ).error,
     );
   }
 
-  const margin = fp.divide(actualNotional, fp.parse(String(input.leverage)), 2, "ceil");
+  const margin = fp.divide(
+    actualNotional,
+    fp.parse(String(input.leverage)),
+    2,
+    "ceil",
+  );
 
-  // Isolated first, then leverage. Both before a code is issued, so a user is
-  // never shown a plan that could not have been set up.
-  const isolated = await deps.futures.setIsolated(symbol);
-  if (!isolated.ok) {
-    return fail(isolated.error);
-  }
-  const levered = await deps.futures.setLeverage(symbol, input.leverage);
-  if (!levered.ok) {
-    return fail(levered.error);
-  }
-
-  // Read the position back so the liquidation price shown is the exchange's,
-  // not one Telt estimated.
-  const after = await deps.futures.position(symbol);
   const liquidationNote =
-    after.ok && after.value.liquidationPrice !== null
-      ? `${fp.format(after.value.liquidationPrice)}`
-      : "not reported until the position is open";
+    "not reported until the position is open; margin settings apply only after confirmation";
 
   const id = deps.newId("fut");
   const code = generateConfirmationCode(deps.random);
@@ -253,10 +266,15 @@ export async function proposeFutures(
       fp.format(mark),
     ].join("\n"),
   );
-  const codeHash = hashConfirmationCode({ code, proposalHash: planHash, hash: deps.hash });
+  const codeHash = hashConfirmationCode({
+    code,
+    proposalHash: planHash,
+    hash: deps.hash,
+  });
   const expiresAt = (now + 120_000) as Instant;
 
   pending.set(codeHash, {
+    owner: deps.store,
     id,
     symbol,
     side: input.side,
@@ -274,30 +292,48 @@ export async function proposeFutures(
     lines.push("FIXTURE MODE - nothing will be sent to the exchange.");
   }
   lines.push("");
-  lines.push(`Size:        ${fp.format(quantity)} (${fp.format(actualNotional)} notional)`);
+  lines.push(
+    `Size:        ${fp.format(quantity)} (${fp.format(actualNotional)} notional)`,
+  );
   lines.push(`Leverage:    ${String(input.leverage)}x, isolated margin`);
   lines.push(`Margin:      about ${fp.format(margin)}`);
   lines.push(`Mark:        ${fp.format(mark)}`);
+  lines.push(
+    "Quote tolerance: 50 bps at confirmation; a market fill price is not guaranteed.",
+  );
   lines.push("");
   lines.push(`Liquidation: ${liquidationNote}`);
   lines.push("");
-  lines.push("Isolated margin means only this margin is at risk, not the whole");
-  lines.push(`futures wallet. At ${String(input.leverage)}x a ${String(Math.round(10000 / input.leverage) / 100)}% move against you is the entire margin.`);
+  lines.push(
+    "Isolated margin means only this margin is at risk, not the whole",
+  );
+  lines.push(
+    `futures wallet. At ${String(input.leverage)}x a ${String(Math.round(10000 / input.leverage) / 100)}% move against you is the entire margin.`,
+  );
   lines.push("");
   lines.push(`Reply  confirm ${code}  to open it.`);
-  lines.push(`The code works once, for this position only, until ${formatInstant(expiresAt)}.`);
+  lines.push(
+    `The code works once, for this position only, until ${formatInstant(expiresAt)}.`,
+  );
 
   return { ok: true, refusalCode: null, body: lines.join("\n") };
 }
 
-export async function confirmFutures(deps: FuturesDeps, code: string): Promise<FuturesOutcome> {
+export async function confirmFutures(
+  deps: FuturesDeps,
+  code: string,
+): Promise<FuturesOutcome> {
   const now = deps.now();
   const normalized = normalizeConfirmationCode(code);
   if (normalized === null) {
-    return fail(refuse("TOKEN_NOT_FOUND", `${JSON.stringify(code)} is not a Telt code.`).error);
+    return fail(
+      refuse("TOKEN_NOT_FOUND", `${JSON.stringify(code)} is not a Telt code.`)
+        .error,
+    );
   }
 
   for (const [codeHash, plan] of pending) {
+    if (plan.owner !== deps.store) continue;
     const planHash = deps.hash(
       [
         "telt.futures.v1",
@@ -308,7 +344,13 @@ export async function confirmFutures(deps: FuturesDeps, code: string): Promise<F
         fp.format(plan.markPrice),
       ].join("\n"),
     );
-    if (hashConfirmationCode({ code: normalized, proposalHash: planHash, hash: deps.hash }) !== codeHash) {
+    if (
+      hashConfirmationCode({
+        code: normalized,
+        proposalHash: planHash,
+        hash: deps.hash,
+      }) !== codeHash
+    ) {
       continue;
     }
 
@@ -317,8 +359,10 @@ export async function confirmFutures(deps: FuturesDeps, code: string): Promise<F
 
     if (now >= plan.expiresAt) {
       return fail(
-        refuse("PROPOSAL_EXPIRED", "That position was priced more than two minutes ago. Ask again.")
-          .error,
+        refuse(
+          "PROPOSAL_EXPIRED",
+          "That position was priced more than two minutes ago. Ask again.",
+        ).error,
       );
     }
 
@@ -331,7 +375,68 @@ export async function confirmFutures(deps: FuturesDeps, code: string): Promise<F
       );
     }
 
-    const clientOrderId = clientOrderIdFrom(deps.hash(`${plan.id}\n${codeHash}`));
+    const safety = deps.store.safetyState();
+    if (
+      deps.ownerHash === null ||
+      safety.killSwitchEngaged ||
+      safety.unreconciledOperations.length > 0
+    ) {
+      return fail(
+        refuse(
+          "KILL_SWITCH_ENGAGED",
+          "Trading permission or safety state changed. No futures settings or order were sent.",
+        ).error,
+      );
+    }
+    const position = await deps.futures.position(plan.symbol);
+    if (!position.ok) return fail(position.error);
+    if (!isFlat(position.value))
+      return fail(
+        refuse(
+          "OPEN_EXPOSURE_ABOVE_CAP",
+          "The position changed since the proposal. Propose again.",
+        ).error,
+      );
+    if (
+      deps.now() >= plan.expiresAt ||
+      plan.leverage > deps.maxLeverage ||
+      fp.greaterThan(plan.notional, deps.maxNotional)
+    )
+      return fail(
+        refuse(
+          "PROPOSAL_EXPIRED",
+          "The proposal expired or its limits changed.",
+        ).error,
+      );
+    const freshMark = await deps.futures.markPrice(plan.symbol);
+    if (!freshMark.ok) return fail(freshMark.error);
+    const move = fp.abs(fp.subtract(freshMark.value, plan.markPrice));
+    if (fp.greaterThan(move, fp.applyBasisPoints(plan.markPrice, 50, "floor")))
+      return fail(
+        refuse(
+          "SLIPPAGE_ABOVE_CAP",
+          "The futures price moved more than the approved 50 bps quote tolerance. Propose again.",
+        ).error,
+      );
+    const finalSafety = deps.store.safetyState();
+    if (
+      finalSafety.killSwitchEngaged ||
+      finalSafety.unreconciledOperations.length > 0 ||
+      deps.now() >= plan.expiresAt
+    )
+      return fail(
+        refuse(
+          "KILL_SWITCH_ENGAGED",
+          "Safety changed during the fresh account check.",
+        ).error,
+      );
+    const isolated = await deps.futures.setIsolated(plan.symbol);
+    if (!isolated.ok) return fail(isolated.error);
+    const levered = await deps.futures.setLeverage(plan.symbol, plan.leverage);
+    if (!levered.ok) return fail(levered.error);
+    const clientOrderId = clientOrderIdFrom(
+      deps.hash(`${plan.id}\n${codeHash}`),
+    );
     const placed = await deps.futures.open({
       symbol: plan.symbol,
       side: plan.side,
@@ -370,13 +475,20 @@ export async function confirmFutures(deps: FuturesDeps, code: string): Promise<F
       }
     }
     lines.push("");
-    lines.push("Telt is watching this position. Use telt_futures_close to exit,");
+    lines.push(
+      "Telt is watching this position. Use telt_futures_close to exit,",
+    );
     lines.push("or telt_positions to see where it stands.");
 
     return { ok: true, refusalCode: null, body: lines.join("\n") };
   }
 
-  return fail(refuse("TOKEN_NOT_FOUND", "That code does not match any position waiting to open.").error);
+  return fail(
+    refuse(
+      "TOKEN_NOT_FOUND",
+      "That code does not match any position waiting to open.",
+    ).error,
+  );
 }
 
 /**
@@ -398,7 +510,11 @@ export async function closeFutures(
   const position = positionResult.value;
 
   if (isFlat(position)) {
-    return { ok: true, refusalCode: null, body: `There is no open ${symbol} futures position.` };
+    return {
+      ok: true,
+      refusalCode: null,
+      body: `There is no open ${symbol} futures position.`,
+    };
   }
 
   const held = fp.abs(position.positionAmt);
@@ -426,7 +542,10 @@ export async function closeFutures(
   // refusing — but it is never done silently.
   let partialImpossible = false;
   const leftover = fp.subtract(held, quantity);
-  if (fp.isPositive(leftover) && fp.lessThan(leftover, filtersResult.value.minQuantity)) {
+  if (
+    fp.isPositive(leftover) &&
+    fp.lessThan(leftover, filtersResult.value.minQuantity)
+  ) {
     quantity = held;
     partialImpossible = true;
   }
@@ -453,9 +572,16 @@ export async function closeFutures(
   }
 
   const clientOrderId = clientOrderIdFrom(
-    deps.hash(`telt.futures.close\n${symbol}\n${fp.format(quantity)}\n${String(now)}`),
+    deps.hash(
+      `telt.futures.close\n${symbol}\n${fp.format(quantity)}\n${String(now)}`,
+    ),
   );
-  const closed = await deps.futures.close({ symbol, position, quantity, clientOrderId });
+  const closed = await deps.futures.close({
+    symbol,
+    position,
+    quantity,
+    clientOrderId,
+  });
   if (!closed.ok) {
     if (closed.error.code === "EXECUTION_RESULT_UNKNOWN") {
       deps.store.engageKillSwitch(
@@ -468,13 +594,14 @@ export async function closeFutures(
 
   const fill = closed.value;
   const realised = position.unrealisedPnl;
-  const note = partialImpossible && fraction < 10_000
-    ? [
-        "",
-        `Closed all of it: ${String(fraction / 100)}% of this position is below the exchange's`,
-        "minimum lot, so a partial close was not possible.",
-      ]
-    : [];
+  const note =
+    partialImpossible && fraction < 10_000
+      ? [
+          "",
+          `Closed all of it: ${String(fraction / 100)}% of this position is below the exchange's`,
+          "minimum lot, so a partial close was not possible.",
+        ]
+      : [];
   return {
     ok: true,
     refusalCode: null,
@@ -499,7 +626,9 @@ export async function describeFutures(
   const lines: string[] = ["Futures"];
 
   if (balances.ok) {
-    const funded = balances.value.filter((entry) => fp.isPositive(entry.balance));
+    const funded = balances.value.filter((entry) =>
+      fp.isPositive(entry.balance),
+    );
     lines.push(
       funded.length === 0
         ? "  wallet: empty"
@@ -507,7 +636,10 @@ export async function describeFutures(
           // past the cents are the exchange's storage precision, not money, and
           // showing them reads as false precision on a balance.
           `  wallet: ${funded
-            .map((entry) => `${fp.format(fp.trim(entry.balance, 2))} ${entry.asset}`)
+            .map(
+              (entry) =>
+                `${fp.format(fp.trim(entry.balance, 2))} ${entry.asset}`,
+            )
             .join(", ")}`,
     );
   }
@@ -534,7 +666,9 @@ export async function describeFutures(
       );
     }
     if (!result.value.isolated) {
-      lines.push("  WARNING: this position is on CROSS margin. The whole wallet backs it.");
+      lines.push(
+        "  WARNING: this position is on CROSS margin. The whole wallet backs it.",
+      );
     }
     lines.push("");
   }

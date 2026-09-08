@@ -175,7 +175,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
   const sweep = setInterval(() => {
     const cutoff = Date.now() - RUNTIME_IDLE_MS;
     for (const [key, tenant] of tenants) {
-      if (tenant.lastUsed < cutoff && key !== "anonymous") {
+      if (tenant.lastUsed < cutoff && key !== "anonymous" && tenant.runtime.store.mandates.active().length === 0 && tenant.runtime.store.safetyState().unreconciledOperations.length === 0) {
         tenant.runtime.close();
         tenants.delete(key);
         log.info("tenant closed", { tenant: key, reason: "idle" });

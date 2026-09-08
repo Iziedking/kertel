@@ -1,38 +1,4 @@
-/**
- * Proof that the agent did the work, checkable by someone who does not trust it.
- *
- * Every AI trading agent has the same unanswerable question asked of it: how do
- * you know it did not invent the thesis? Logs do not answer it. A log is
- * written by the same program that would have lied, kept by the same operator
- * who benefits from the lie, and can be edited afterwards by either. "Our
- * decisions are reproducible from our logs" is a claim about the logs.
- *
- * An attestation answers it with facts that live outside Telt entirely:
- *
- * 1. **The payment is on a public chain.** Telt buys its research with x402, so
- *    every source it read left a real transaction — an amount, a recipient, a
- *    payer and a block timestamp that anyone can pull up without asking Telt
- *    anything. Research that did not happen has no transaction.
- * 2. **The evidence is committed to.** The provenance digest is taken over what
- *    each source actually returned, so the payload cannot be swapped afterwards
- *    for something that better fits the outcome.
- * 3. **The conclusion is signed by the key that paid.** The same account that
- *    sent those transactions signs the decision. Not "an agent" concluded this:
- *    *this* agent, the one whose money moved.
- * 4. **The block timestamp precedes the order.** The chain records when the
- *    money moved, and the exchange records when the order was placed. A thesis
- *    written after a trade cannot be backdated into a block.
- *
- * Which is why the chain runs one way and cannot be run backwards: paid ->
- * read -> concluded -> traded, with the first and last links held by parties
- * who have never heard of Telt.
- *
- * The format is plain lines rather than JSON on purpose. It has to survive
- * being pasted into a chat window, quoted in an email, and read aloud in a
- * demo — and a verifier has to be able to reconstruct the exact signed bytes
- * from what it was given, which JSON's key ordering makes needlessly delicate.
- */
-
+/** Signed statements. Offline checks establish signature integrity only. */
 import type { FixedPoint } from "../money/index.js";
 import * as fp from "../money/index.js";
 
@@ -49,6 +15,7 @@ export type PaymentProof = {
 };
 
 export type Attestation = {
+  readonly binding?: { readonly researchRunId: string; readonly decisionDigest: string; readonly proposalHash: string };
   readonly symbol: string;
   readonly goal: string;
   /** When Telt reached the conclusion. The chain holds the authoritative times. */
@@ -92,7 +59,7 @@ export function canonicalize(attestation: Attestation): string {
     .sort();
 
   return [
-    ATTESTATION_VERSION,
+    attestation.binding ? "TELT-ATTESTATION-2" : ATTESTATION_VERSION,
     `symbol=${attestation.symbol}`,
     `goal=${attestation.goal}`,
     `at=${attestation.at}`,
@@ -101,6 +68,7 @@ export function canonicalize(attestation: Attestation): string {
     `spent=${fp.format(attestation.spent)}`,
     `decision=${attestation.decision}`,
     `order=${attestation.order ?? "none"}`,
+    ...(attestation.binding ? [`researchRunId=${attestation.binding.researchRunId}`, `decisionDigest=${attestation.binding.decisionDigest}`, `proposalHash=${attestation.binding.proposalHash}`] : []),
     ...payments.map((line) => `payment=${line}`),
   ].join("\n");
 }
@@ -127,18 +95,19 @@ export function serialize(signed: SignedAttestation): string {
  * than none.
  */
 export function deserialize(text: string): SignedAttestation | null {
+  if (text.length > 64000) return null;
   const lines = text
     .split("\n")
     .map((line) => line.trim().replace(/^[>|\s]+/, ""))
     .filter((line) => line !== "");
 
-  const start = lines.indexOf(ATTESTATION_VERSION);
+  const start = lines.findIndex(line => line === ATTESTATION_VERSION || line === "TELT-ATTESTATION-2");
   if (start === -1) return null;
 
   // Exactly one attestation, ending where the next begins. Without this bound
   // the repeatable `payment=` lines accumulate across both, producing a record
   // that nobody signed and that therefore fails for a confusing reason.
-  const after = lines.indexOf(ATTESTATION_VERSION, start + 1);
+  const after = lines.findIndex((line, i) => i > start && (line === ATTESTATION_VERSION || line === "TELT-ATTESTATION-2"));
   const body = lines.slice(start + 1, after === -1 ? undefined : after);
 
   const fields = new Map<string, string>();
@@ -151,10 +120,11 @@ export function deserialize(text: string): SignedAttestation | null {
     const value = line.slice(split + 1);
     if (key === "payment") {
       payments.push(value);
-    } else if (!fields.has(key)) {
-      // First wins, for a field repeated inside one attestation.
+    } else {
+      if (fields.has(key)) return null;
       fields.set(key, value);
     }
+    if (key === "sig") break;
   }
 
   const required = ["symbol", "goal", "at", "agent", "provenance", "spent", "decision", "sig"];
@@ -162,6 +132,8 @@ export function deserialize(text: string): SignedAttestation | null {
     if (!fields.has(key)) return null;
   }
 
+  const isV2 = lines[start] === "TELT-ATTESTATION-2";
+  if (isV2 && ["researchRunId", "decisionDigest", "proposalHash"].some(key => !fields.get(key))) return null;
   const parsedPayments: PaymentProof[] = [];
   for (const entry of payments) {
     const parts = entry.split(":");
@@ -183,6 +155,7 @@ export function deserialize(text: string): SignedAttestation | null {
 
   return {
     attestation: {
+      ...(isV2 ? { binding: { researchRunId: fields.get("researchRunId")!, decisionDigest: fields.get("decisionDigest")!, proposalHash: fields.get("proposalHash")! } } : {}),
       symbol: fields.get("symbol") ?? "",
       goal: fields.get("goal") ?? "",
       at: fields.get("at") ?? "",
@@ -250,7 +223,7 @@ export function checkOffline(
         ? {
             name: "signature",
             status: "pass" as const,
-            detail: `Signed by ${claimed}. The conclusion and the address that paid for it match.`,
+            detail: `Signed by ${claimed}. This verifies the signature against the claimed address, not the identity or payment.`,
           }
         : {
             name: "signature",
@@ -262,22 +235,24 @@ export function checkOffline(
   const paid = signed.attestation.payments.filter((payment) => payment.transaction !== null);
   checks.push({
     name: "evidence was paid for",
-    status: paid.length > 0 ? ("pass" as const) : ("info" as const),
+    status: "info",
     detail:
       paid.length > 0
-        ? `${String(paid.length)} onchain payment${paid.length === 1 ? "" : "s"} totalling ${fp.format(signed.attestation.spent)} USDC. Follow the links and check the payer, amount and block time yourself.`
-        : "No settled payment is recorded, so this attestation rests on free sources only. It proves what Telt read, not that it bought anything.",
+        ? `${String(paid.length)} claimed payment reference(s). Not checked against the chain. A reference alone does not prove a payment or delivery.`
+        : "No payment is claimed. This signature does not prove which sources were read.",
   });
 
   checks.push({
     name: "order",
-    status: signed.attestation.order !== null ? ("pass" as const) : ("info" as const),
+    status: "info",
     detail:
       signed.attestation.order === null
         ? "Research only. No order is claimed against this evidence."
-        : `Order ${signed.attestation.order}. The account holder can confirm this fill against Binance directly.`,
+        : `Order ${signed.attestation.order} is claimed, not verified. Only the account holder can check it against Binance.`,
   });
 
+  checks.push({ name: "evidence content", status: "info", detail: "The evidence digest is signed. The original provider payloads and their origin have not been verified." });
+  checks.push({ name: "research timing", status: "info", detail: "The stated time is not independently timestamped. A payment block time does not date this off-chain decision." });
   return checks;
 }
 
@@ -290,18 +265,18 @@ export function checkOffline(
  * them, unwrapped and unindented so that copying it cannot corrupt it.
  */
 export function renderAttestationBlock(signed: SignedAttestation): string {
-  const lines: string[] = ["Proof of research"];
+  const lines: string[] = ["Signed evidence receipt"];
 
   const paid = signed.attestation.payments.filter((payment) => payment.transaction !== null);
   if (paid.length === 0) {
     lines.push(
       "  Nothing was bought for this, so there is no payment to check. The signature below still " +
-        "shows which agent reached this conclusion, and over what evidence.",
+        "identifies the signing key and the claims it signed. It does not authenticate those claims.",
     );
   } else {
     lines.push(
-      `  Telt paid ${fp.format(signed.attestation.spent)} USDC of its own for this evidence. ` +
-        "Those payments are on a public chain — check them yourself:",
+      `  Claimed research spend: ${fp.format(signed.attestation.spent)} USD equivalent. ` +
+        "Payment references below require independent verification:",
     );
     for (const payment of paid) {
       const url = explorerUrl(payment);
@@ -311,8 +286,8 @@ export function renderAttestationBlock(signed: SignedAttestation): string {
       );
     }
     lines.push(
-      `  The payer is ${signed.attestation.agent.toLowerCase()}, and that same address signed the ` +
-        "conclusion below. The block times sit before any order placed on it.",
+      `  Claimed payer and signer: ${signed.attestation.agent.toLowerCase()}. ` +
+        "The signature alone does not verify payment, source authenticity, or pre-trade timing.",
     );
   }
 

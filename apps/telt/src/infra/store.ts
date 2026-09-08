@@ -1,3 +1,5 @@
+import { researchStore } from "./research-store.js";
+import type { ResearchStore } from "./research-store.js";
 /**
  * Durable state, on `node:sqlite`.
  *
@@ -66,6 +68,7 @@ export type Store = {
   releaseKillSwitch(): void;
   /** Proposals, confirmation tokens and operations. */
   readonly trades: TradeStore;
+  readonly research: ResearchStore;
   /** Standing exit plans, and the journal of what the agent did about them. */
   readonly mandates: MandateStore;
   readonly attestations: AttestationStore;
@@ -138,6 +141,7 @@ export function openStore(path: string): Store {
 
   return {
     trades,
+    research: researchStore(db),
     mandates,
     attestations: attestationStore(db),
     autonomy: autonomyStore(db),
@@ -277,6 +281,10 @@ function migrate(db: DatabaseSync): void {
         String(row["name"]),
       ),
     );
+
+  for (const field of ["research_run_id", "decision_id", "decision_digest"]) {
+    if (!columns("proposals").has(field)) db.exec(`ALTER TABLE proposals ADD COLUMN ${field} TEXT`);
+  }
 
   // Added when futures exits arrived. Everything written before then was spot,
   // which is exactly what the default says.

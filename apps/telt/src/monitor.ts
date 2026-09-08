@@ -14,12 +14,7 @@
  *
  * Three things it does that a naive trigger does not:
  *
- * - **It asks why before acting on a protective exit.** A stop hit by a 5%
- *   lurch between two checks is a different event from one reached by slow
- *   drift. When the move is abrupt, the loop buys the cheap evidence first and
- *   writes what it found into the journal next to the decision. It still exits —
- *   the stop is the stop — but the record says whether smart money was leaving
- *   or arriving, which is what tells you afterwards whether the rule was right.
+ * - **Protective exits do not wait on research.** Explanatory work belongs in a later review.
  * - **It writes down the times it did nothing.** An agent that only journals its
  *   trades is indistinguishable from one that got lucky.
  * - **It stops itself.** Kill switch, unreconciled orders, an exchange that will
@@ -52,7 +47,9 @@ export type MonitorDeps = {
   readonly mode: "fixture" | "live";
   readonly liveExecutionEnabled: boolean;
   /** Buy cheap evidence when a protective exit looks abrupt. */
-  readonly research: (symbol: string) => Promise<{ readonly ok: boolean; readonly body: string }>;
+  readonly research: (
+    symbol: string,
+  ) => Promise<{ readonly ok: boolean; readonly body: string }>;
   readonly newId: (prefix: string) => string;
 };
 
@@ -70,7 +67,17 @@ export type SweepResult = {
  * `telt_check_positions`, and so a demo can show a whole position lifecycle
  * without waiting for a market to move.
  */
-export async function sweep(deps: MonitorDeps): Promise<SweepResult> {
+const sweeps = new WeakMap<Store, Promise<SweepResult>>();
+export function sweep(deps: MonitorDeps): Promise<SweepResult> {
+  const existing = sweeps.get(deps.store);
+  if (existing) return existing;
+  const running = performSweep(deps).finally(() => {
+    sweeps.delete(deps.store);
+  });
+  sweeps.set(deps.store, running);
+  return running;
+}
+async function performSweep(deps: MonitorDeps): Promise<SweepResult> {
   const now = deps.now();
   const lines: string[] = [];
 
@@ -95,10 +102,11 @@ export async function sweep(deps: MonitorDeps): Promise<SweepResult> {
   }
 
   // Answer the questions that could not be answered when they were asked.
-  await settleOldVerdicts(deps, now);
+  // Retrospective checks run after active protection.
 
   const mandates = deps.store.mandates.active();
   if (mandates.length === 0) {
+    await settleOldVerdicts(deps, now);
     return { checked: 0, fired: 0, halted: null, lines: [] };
   }
 
@@ -111,6 +119,7 @@ export async function sweep(deps: MonitorDeps): Promise<SweepResult> {
     }
   }
 
+  await settleOldVerdicts(deps, deps.now());
   return { checked: mandates.length, fired, halted: null, lines };
 }
 
@@ -129,8 +138,13 @@ const VERDICT_AFTER_MS = 24 * 60 * 60 * 1000;
  * the review can never come from Telt's own records. It is free: the venue
  * price costs nothing, and a handful of rows are settled per sweep.
  */
-async function settleOldVerdicts(deps: MonitorDeps, now: Instant): Promise<void> {
-  const due = deps.store.mandates.outcomesAwaitingVerdict((now - VERDICT_AFTER_MS) as Instant);
+async function settleOldVerdicts(
+  deps: MonitorDeps,
+  now: Instant,
+): Promise<void> {
+  const due = deps.store.mandates.outcomesAwaitingVerdict(
+    (now - VERDICT_AFTER_MS) as Instant,
+  );
   if (due.length === 0) {
     return;
   }
@@ -169,7 +183,11 @@ async function settleOldVerdicts(deps: MonitorDeps, now: Instant): Promise<void>
 
 type Visit = { readonly text: string; readonly fired: boolean };
 
-async function visit(deps: MonitorDeps, mandate: ExitMandate, now: Instant): Promise<Visit> {
+async function visit(
+  deps: MonitorDeps,
+  mandate: ExitMandate,
+  now: Instant,
+): Promise<Visit> {
   const symbol = mandate.symbol;
 
   // Spot or futures. The mandate says which, and everything below this line is
@@ -185,7 +203,10 @@ async function visit(deps: MonitorDeps, mandate: ExitMandate, now: Instant): Pro
       detail: venueResult.error.detail,
       evidence: null,
     });
-    return { text: `${symbol}: could not check — ${venueResult.error.detail}`, fired: false };
+    return {
+      text: `${symbol}: could not check — ${venueResult.error.detail}`,
+      fired: false,
+    };
   }
   const venue = venueResult.value;
 
@@ -213,7 +234,9 @@ async function visit(deps: MonitorDeps, mandate: ExitMandate, now: Instant): Pro
   // a drift, and it is the only reason the loop stores the last price.
   const previous = deps.store.mandates.lastSeen(mandate.id);
   const sinceLast =
-    previous.price === null ? 0 : moveBps(fp.parse(previous.price), reading.price);
+    previous.price === null
+      ? 0
+      : moveBps(fp.parse(previous.price), reading.price);
 
   const trigger = evaluateMandate({
     mandate,
@@ -246,7 +269,10 @@ async function visit(deps: MonitorDeps, mandate: ExitMandate, now: Instant): Pro
   }
 
   if (trigger.kind === "expired" || trigger.kind === "unfulfillable") {
-    deps.store.mandates.setStatus(mandate.id, trigger.kind === "expired" ? "expired" : "unfulfillable");
+    deps.store.mandates.setStatus(
+      mandate.id,
+      trigger.kind === "expired" ? "expired" : "unfulfillable",
+    );
     deps.store.mandates.journal({
       at: now,
       kind: "mandate_cancelled",
@@ -271,24 +297,8 @@ async function fire(
 ): Promise<Visit> {
   const symbol = mandate.symbol;
 
-  // The judgement call a trader makes and a trigger does not: an abrupt
-  // protective exit is worth understanding. The exit still happens — the stop is
-  // the stop — but the record says what was going on when it did.
-  let evidence: string | null = null;
-  if (trigger.worthChecking) {
-    const research = await deps.research(symbol);
-    evidence = research.body;
-    deps.store.mandates.journal({
-      at: now,
-      kind: "evidence_taken",
-      symbol,
-      mandateId: mandate.id,
-      headline: `Checked why ${symbol} moved before exiting`,
-      detail:
-        "The stop was reached by an abrupt move rather than a drift, so Telt bought evidence before acting on it.",
-      evidence: research.body,
-    });
-  }
+  // Protective execution never waits on paid research. Review the exit separately.
+  const evidence: string | null = null;
 
   deps.store.mandates.recordProgress(
     mandate.id,
@@ -318,7 +328,7 @@ async function fire(
   // Derived, not random: the same mandate at the same peak having sold the same
   // amount produces the same id, so a retry after a crash cannot double-sell.
   const idempotencyKey = deps.hash(
-    `telt.mandate.v1\n${mandate.id}\n${String(trigger.highWaterBps)}\n${String(mandate.soldBps)}\n${String(trigger.sellFractionBps)}`,
+    `telt.mandate.v2\n${mandate.id}\n${fp.format(mandate.soldQuantity)}\n${String(mandate.soldBps)}\n${String(trigger.sellFractionBps)}`,
   );
   const clientOrderId = clientOrderIdFrom(idempotencyKey);
 
@@ -341,14 +351,38 @@ async function fire(
       kind: unknown ? "halted" : "exit_failed",
       symbol,
       mandateId: mandate.id,
-      headline: unknown ? `Exit for ${symbol} unresolved — Telt stopped` : `Exit for ${symbol} refused`,
+      headline: unknown
+        ? `Exit for ${symbol} unresolved — Telt stopped`
+        : `Exit for ${symbol} refused`,
       detail: placed.error.detail,
       evidence,
     });
-    return { text: `${symbol}: exit failed — ${placed.error.detail}`, fired: false };
+    return {
+      text: `${symbol}: exit failed — ${placed.error.detail}`,
+      fired: false,
+    };
   }
 
   const order = placed.value;
+  if (order.status !== "filled") {
+    deps.store.engageKillSwitch(
+      `Protective exit ${order.exchangeOrderRef} for ${symbol} is ${order.status}; reconcile the exact fill before any retry.`,
+      deps.now(),
+    );
+    deps.store.mandates.journal({
+      at: deps.now(),
+      kind: "halted",
+      symbol,
+      mandateId: mandate.id,
+      headline: "Exit is not fully filled",
+      detail: `Order ${order.exchangeOrderRef} remains ${order.status}. Mandate progress was not marked complete.`,
+      evidence: null,
+    });
+    return {
+      text: `${symbol}: exit ${order.status}; reconciliation required`,
+      fired: false,
+    };
+  }
   const soldBps = Math.min(10_000, mandate.soldBps + trigger.sellFractionBps);
   deps.store.mandates.recordProgress(
     mandate.id,
@@ -364,7 +398,10 @@ async function fire(
   const realised =
     order.averagePrice === null
       ? null
-      : fp.multiply(fp.subtract(order.averagePrice, mandate.entryPrice), order.filledQuantity);
+      : fp.multiply(
+          fp.subtract(order.averagePrice, mandate.entryPrice),
+          order.filledQuantity,
+        );
 
   const headline = `Sold ${fp.format(order.filledQuantity)} ${symbol}${
     order.averagePrice === null ? "" : ` at ${fp.format(order.averagePrice)}`
@@ -394,7 +431,9 @@ async function fire(
     mandateId: mandate.id,
     headline,
     detail: `${trigger.because}${
-      realised === null ? "" : ` Realised ${fp.format(realised)} against entry ${fp.format(mandate.entryPrice)}.`
+      realised === null
+        ? ""
+        : ` Realised ${fp.format(realised)} against entry ${fp.format(mandate.entryPrice)}.`
     } Order ${order.exchangeOrderRef}.`,
     evidence,
   });
@@ -439,7 +478,10 @@ export function createMonitor(deps: MonitorDeps, intervalMs: number): Monitor {
       if (result.halted !== null) {
         deps.log.warn("monitor halted", { reason: result.halted });
       } else if (result.checked > 0) {
-        deps.log.debug("monitor swept", { checked: result.checked, fired: result.fired });
+        deps.log.debug("monitor swept", {
+          checked: result.checked,
+          fired: result.fired,
+        });
       }
     } catch (cause) {
       // A monitor that dies silently is worse than one that never ran.

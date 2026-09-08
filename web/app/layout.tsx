@@ -7,25 +7,50 @@ import Nav from "./Nav";
 // body, Space Mono for anything a machine produced. The mono is doing real work
 // here — an attestation and a transaction hash have to read as machine-real,
 // not as prose someone typed.
-const display = Fredoka({ subsets: ["latin"], variable: "--font-display", weight: ["500", "600", "700"] });
+const display = Fredoka({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ["500", "600", "700"],
+});
 const body = Hanken_Grotesk({ subsets: ["latin"], variable: "--font-body" });
-const mono = Space_Mono({ subsets: ["latin"], variable: "--font-mono", weight: ["400", "700"] });
+const mono = Space_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  weight: ["400", "700"],
+});
 
-const TITLE = "Telt · a trading agent you can verify";
+const TITLE = "Telt · Your Binance AI agent";
 const DESCRIPTION =
-  "Telt buys its own research over x402 and signs every conclusion with the same key that paid. The payment is on a public chain, the evidence is committed to by hash, and anyone can check the chain without trusting the agent. Binance spot and USDⓈ-M futures, over MCP.";
+  "A Binance AI agent built with Agent OS. Research with a budget, record a decision, approve an exact order, and inspect signed receipts.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   applicationName: "Telt",
-  openGraph: { title: TITLE, description: DESCRIPTION, siteName: "Telt", type: "website" },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    siteName: "Telt",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${display.variable} ${body.variable} ${mono.variable}`}
+    >
       <head>
         {/* Applied before paint, so a dark-mode reader is not flashed white. */}
         <script
@@ -35,8 +60,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        <a href="#content" className="skip-link">
+          Skip to content
+        </a>
         <Nav />
+        <div id="content" />
         {children}
+        <footer className="wrap footer">
+          <div>
+            <a className="wordmark" href="/">
+              telt<span className="wm-accent">.</span>
+            </a>
+            <p>
+              An independent project built with Binance Agent OS. Trading
+              involves risk. Research and signatures do not guarantee a
+              profitable outcome.
+            </p>
+          </div>
+          <div className="footer-links">
+            <a href="/connect">Connect</a>
+            <a href="/verify">Verify</a>
+            <a href="https://github.com/Iziedking/kertel">GitHub ↗</a>
+          </div>
+        </footer>
       </body>
     </html>
   );

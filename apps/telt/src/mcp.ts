@@ -50,7 +50,9 @@ function text(body: string, isError = false): TextResult {
  * model then tries to interpret. A refusal is a returned value everywhere else
  * in Telt, and it should be one here too.
  */
-async function guard(run: () => Promise<TextResult> | TextResult): Promise<TextResult> {
+async function guard(
+  run: () => Promise<TextResult> | TextResult,
+): Promise<TextResult> {
   try {
     return await run();
   } catch (cause) {
@@ -70,48 +72,48 @@ export function buildServer(runtime: Runtime): McpServer {
         "TALKING TO THE USER. Never make them name a tool. They speak plainly; you choose the calls and",
         "chain them without being asked. Map what they say onto this:",
         "",
-        "- \"what is moving\" / \"anything interesting\" / \"find me something\" / \"what should I look at\"",
+        '- "what is moving" / "anything interesting" / "find me something" / "what should I look at"',
         "    -> telt_scan. It is free, so run it rather than asking them to name a token. Then offer",
         "      to research whichever candidate they react to. Never call a scan result a signal.",
-        "- \"can I buy X\" / \"is X a good buy\" / \"what do you think of X\" / \"check X for me\"",
+        '- "can I buy X" / "is X a good buy" / "what do you think of X" / "check X for me"',
         "    -> telt_research FIRST, then give YOUR verdict from the evidence, then offer the trade.",
         "      A buy question is a research question. Do not price an order as the answer to it.",
-        "- \"buy me $20 of X\" / \"get me some X\" / \"long X at 3x\"",
+        '- "buy me $20 of X" / "get me some X" / "long X at 3x"',
         "    -> telt_propose (or telt_futures_open). Show the numbers. Stop. Wait for their code.",
         "      They have decided; do not research unprompted, but do say if you have no evidence.",
-        "- \"how am I doing\" / \"what am I holding\" / \"any risks\" / \"should I worry\"",
+        '- "how am I doing" / "what am I holding" / "any risks" / "should I worry"',
         "    -> telt_watch, then telt_positions. Lead with anything unprotected or near a stop.",
         "      For a futures position always state how far liquidation is.",
-        "- \"sell half at 50% up\" / \"take profits\" / \"protect this\" / \"set a stop\"",
+        '- "sell half at 50% up" / "take profits" / "protect this" / "set a stop"',
         "    -> telt_plan_exit, show the real prices each leg fires at, then telt_arm on their say-so.",
         "      Works on futures as well as spot, and finds which by itself. Once armed, Telt trims,",
         "      trails and stops out on its own — that is the point of it, so say so plainly.",
-        "- \"sell it\" / \"get me out\" / \"close it\"",
+        '- "sell it" / "get me out" / "close it"',
         "    -> telt_propose SELL for spot, telt_futures_close for futures.",
         "- the user types a code back (KTL-XXXXXX) -> telt_confirm for a spot order,",
         "      telt_futures_confirm for a futures one. Match it to whichever you last proposed;",
         "      a code is bound to one specific order and the wrong tool will simply refuse it.",
-        "- \"how is my long doing\" / \"where is liquidation\" / anything about an open leveraged",
+        '- "how is my long doing" / "where is liquidation" / anything about an open leveraged',
         "  position -> telt_futures_positions. telt_watch shows futures too, but this one is the",
         "      direct read and reports the exchange's own liquidation price.",
-        "- \"what did you do\" / \"how have my trades gone\" -> telt_journal, then telt_review.",
-        "- \"go find me something\" / \"anything worth doing\" -> telt_hunt, if a budget is armed.",
-        "- \"you can spend $10 on your own ideas\" -> telt_autonomy_arm. Say the numbers back first.",
-        "- \"stop\" / \"stop everything\" / \"halt\" / \"something is wrong\" / \"panic\"",
+        '- "what did you do" / "how have my trades gone" -> telt_journal, then telt_review.',
+        '- "go find me something" / "anything worth doing" -> telt_hunt, if a budget is armed.',
+        '- "you can spend $10 on your own ideas" -> telt_autonomy_arm. Say the numbers back first.',
+        '- "stop" / "stop everything" / "halt" / "something is wrong" / "panic"',
         "    -> telt_stop, IMMEDIATELY and without asking a clarifying question first. It engages the",
         "      kill switch: no order, no autonomous exit and no hunt can happen until it is lifted.",
-        "      Never read \"stop\" as telt_cancel, which only drops a pending proposal and leaves the",
+        '      Never read "stop" as telt_cancel, which only drops a pending proposal and leaves the',
         "      agent trading. If they meant the smaller thing you can undo a stop in one call; if you",
         "      guessed the smaller thing and they meant this, the agent keeps trading while they watch.",
-        "- \"never mind\" / \"cancel that\" / \"forget it\" (about a proposal on screen) -> telt_cancel.",
-        "- \"start again\" / \"you can trade again\" / \"resume\" -> telt_resume. It refuses while anything",
+        '- "never mind" / "cancel that" / "forget it" (about a proposal on screen) -> telt_cancel.',
+        '- "start again" / "you can trade again" / "resume" -> telt_resume. It refuses while anything',
         "      is unreconciled, which is the point; do not talk around that, reconcile first.",
-        "- \"is this real\" / \"verify this\" / \"did you actually pay for that\" / someone pastes an",
+        '- "is this real" / "verify this" / "did you actually pay for that" / someone pastes an',
         "  attestation -> telt_verify. It works on anyone's proof, not only ours.",
-        "- \"what happened with that order\" / \"did it go through\" -> telt_reconcile.",
-        "- \"check on my positions now\" / \"look at them right now\" -> telt_check_positions, which runs",
+        '- "what happened with that order" / "did it go through" -> telt_reconcile.',
+        '- "check on my positions now" / "look at them right now" -> telt_check_positions, which runs',
         "      the monitor sweep immediately rather than waiting for its next tick.",
-        "- \"drop that plan\" / \"stop watching X\" -> telt_cancel_plan.",
+        '- "drop that plan" / "stop watching X" -> telt_cancel_plan.',
         "",
         "AUTONOMY. telt_hunt is the only path where Telt opens a position nobody asked for, and it",
         "needs a budget armed by the human first. Never arm one on your own initiative, never pick",
@@ -129,13 +131,17 @@ export function buildServer(runtime: Runtime): McpServer {
         "Not every symbol has paid coverage. Telt trades anything Binance lists, but only some",
         "instruments have verified CoinGecko/CoinMarketCap/Nansen ids, and the rest refuse BY NAME on the",
         "receipt rather than guessing an id and pricing the wrong asset. When that happens, say so plainly",
-        "-- \"the paid sources have no verified id for this, so this is venue data only\" -- and let the",
+        '-- "the paid sources have no verified id for this, so this is venue data only" -- and let the',
         "user decide. Never present single-source venue data as corroborated research.",
         "",
         "How to work with it:",
         "- Call telt_status first if you are unsure what is available. It never lies about capability.",
         "- telt_research returns evidence and a cost receipt. It does NOT return a verdict — that is your job.",
         "  Read the sources, note what was skipped and why, and say what you actually conclude.",
+        "  Record that conclusion with telt_decide using the returned researchRunId and evidence IDs.",
+        "  Pass its decisionId to telt_propose for a research-driven order. Never substitute unrelated research.",
+        "  Signatures do not prove settlement, provider origin or chronology.",
+        "  Discretionary live entries are paused until account-wide risk accounting is available.",
         "- Research costs real money over x402: about $0.01 for a price check, $0.06 for a full thesis.",
         "  Use price_check unless the question is genuinely whether to trade.",
         "- telt_propose prices an order and returns a one-use code. It does not place anything.",
@@ -207,7 +213,8 @@ export function buildServer(runtime: Runtime): McpServer {
         limit: z.number().int().positive().max(25).default(8),
       },
     },
-    async ({ minQuoteVolume, limit }) => guard(async () => text(await runtime.scan(minQuoteVolume, limit))),
+    async ({ minQuoteVolume, limit }) =>
+      guard(async () => text(await runtime.scan(minQuoteVolume, limit))),
   );
 
   server.registerTool(
@@ -242,7 +249,9 @@ export function buildServer(runtime: Runtime): McpServer {
         granted: z
           .string()
           .regex(/^\d+(\.\d+)?$/)
-          .describe("Total the agent may commit, in USDT. Say it back to the user before arming."),
+          .describe(
+            "Total the agent may commit, in USDT. Say it back to the user before arming.",
+          ),
         perTrade: z
           .string()
           .regex(/^\d+(\.\d+)?$/)
@@ -253,11 +262,15 @@ export function buildServer(runtime: Runtime): McpServer {
           .positive()
           .max(168)
           .default(24)
-          .describe("How long the permission lasts. Consent should not outlive the day it was given."),
+          .describe(
+            "How long the permission lasts. Consent should not outlive the day it was given.",
+          ),
       },
     },
     async ({ granted, perTrade, hours }) =>
-      guard(async () => text(runtime.autonomy.arm({ granted, perTrade, hours }))),
+      guard(async () =>
+        text(runtime.autonomy.arm({ granted, perTrade, hours })),
+      ),
   );
 
   server.registerTool(
@@ -272,12 +285,18 @@ export function buildServer(runtime: Runtime): McpServer {
         paused: z
           .boolean()
           .optional()
-          .describe("Set true to stop Telt acting on its own; false to resume. Omit to just read."),
+          .describe(
+            "Set true to stop Telt acting on its own; false to resume. Omit to just read.",
+          ),
       },
     },
     async ({ paused }) =>
       guard(async () =>
-        text(paused === undefined ? runtime.autonomy.status() : runtime.autonomy.pause(paused)),
+        text(
+          paused === undefined
+            ? runtime.autonomy.status()
+            : runtime.autonomy.pause(paused),
+        ),
       ),
   );
 
@@ -296,10 +315,13 @@ export function buildServer(runtime: Runtime): McpServer {
         attestation: z
           .string()
           .min(1)
-          .describe("The full attestation text, from the TELT-ATTESTATION-1 line to the sig= line."),
+          .describe(
+            "The full attestation text, from the TELT-ATTESTATION-1 line to the sig= line.",
+          ),
       },
     },
-    async ({ attestation }) => guard(async () => text(await runtime.verify(attestation))),
+    async ({ attestation }) =>
+      guard(async () => text(await runtime.verify(attestation))),
   );
 
   server.registerTool(
@@ -313,15 +335,45 @@ export function buildServer(runtime: Runtime): McpServer {
         "goal='trade_thesis' (~$0.06) additionally buys Nansen Smart Money flows and is only worth it when " +
         "the question is whether to trade. Returns evidence, not a verdict: you draw the conclusion.",
       inputSchema: {
-        symbol: z.string().describe("Spot symbol, uppercase, for example ETHUSDT."),
+        symbol: z
+          .string()
+          .describe("Spot symbol, uppercase, for example ETHUSDT."),
         goal: z
           .enum(["price_check", "trade_thesis"])
-          .describe("price_check is five times cheaper. Do not use trade_thesis for a price question."),
+          .describe(
+            "price_check is five times cheaper. Do not use trade_thesis for a price question.",
+          ),
       },
     },
     async ({ symbol, goal }) =>
       guard(async () => {
         const result = await runtime.research({ symbol, goal });
+        return text(result.body, !result.ok);
+      }),
+  );
+
+  server.registerTool(
+    "telt_decide",
+    {
+      title: "Record a research decision",
+      description:
+        "Record your conclusion against the exact research run. Cite returned evidence IDs and name what would invalidate the conclusion. This grants no trading permission.",
+      inputSchema: {
+        researchRunId: z.string().min(1),
+        recommendation: z.enum([
+          "BUY_CANDIDATE",
+          "NO_TRADE",
+          "INSUFFICIENT_EVIDENCE",
+        ]),
+        summary: z.string().min(10).max(2000),
+        supportingEvidence: z.array(z.string()).min(1).max(20),
+        invalidatedBy: z.array(z.string().min(1).max(500)).min(1).max(10),
+        modelId: z.string().min(1).max(120),
+      },
+    },
+    async (input) =>
+      guard(() => {
+        const result = runtime.decide(input);
         return text(result.body, !result.ok);
       }),
   );
@@ -337,12 +389,22 @@ export function buildServer(runtime: Runtime): McpServer {
       inputSchema: {
         symbol: z.string().describe("Spot symbol, uppercase."),
         side: z.enum(["BUY", "SELL"]),
-        notional: z.string().describe('Amount in quote currency as a decimal string, e.g. "10".'),
+        notional: z
+          .string()
+          .describe('Amount in quote currency as a decimal string, e.g. "10".'),
+        researchRunId: z.string().optional(),
+        decisionId: z.string().optional(),
       },
     },
-    async ({ symbol, side, notional }) =>
+    async ({ symbol, side, notional, researchRunId, decisionId }) =>
       guard(async () => {
-        const result = await runtime.propose({ symbol, side, notional });
+        const result = await runtime.propose({
+          symbol,
+          side,
+          notional,
+          ...(researchRunId ? { researchRunId } : {}),
+          ...(decisionId ? { decisionId } : {}),
+        });
         return text(result.body, !result.ok);
       }),
   );
@@ -357,7 +419,11 @@ export function buildServer(runtime: Runtime): McpServer {
         "their own message. Never invent, complete, guess or reuse a code, and never call this to test " +
         "whether a code is valid.",
       inputSchema: {
-        code: z.string().describe("The confirmation code exactly as the human typed it, e.g. KTL-4B7QK2."),
+        code: z
+          .string()
+          .describe(
+            "The confirmation code exactly as the human typed it, e.g. KTL-4B7QK2.",
+          ),
       },
     },
     async ({ code }) =>
@@ -398,12 +464,18 @@ export function buildServer(runtime: Runtime): McpServer {
       description:
         "Engage the kill switch. Telt refuses all research, proposals, orders and autonomous exits until " +
         "explicitly resumed. Survives a restart. Use it the moment anything looks wrong.",
-      inputSchema: { reason: z.string().describe("Why. Shown back on every subsequent refusal.") },
+      inputSchema: {
+        reason: z
+          .string()
+          .describe("Why. Shown back on every subsequent refusal."),
+      },
     },
     async ({ reason }) =>
       guard(() => {
         runtime.store.engageKillSwitch(reason, runtime.clock.now());
-        return text(`Telt is stopped: ${reason}\n\nNothing will run until it is resumed.`);
+        return text(
+          `Telt is stopped: ${reason}\n\nNothing will run until it is resumed.`,
+        );
       }),
   );
 
@@ -441,7 +513,11 @@ export function buildServer(runtime: Runtime): McpServer {
         takeProfit: z
           .array(
             z.object({
-              atBps: z.number().int().positive().describe("Basis points above entry, 5000 = +50%."),
+              atBps: z
+                .number()
+                .int()
+                .positive()
+                .describe("Basis points above entry, 5000 = +50%."),
               fractionBps: z
                 .number()
                 .int()
@@ -451,7 +527,9 @@ export function buildServer(runtime: Runtime): McpServer {
             }),
           )
           .default([])
-          .describe("Scale-out rungs. A trader takes some off at the first target and lets the rest run."),
+          .describe(
+            "Scale-out rungs. A trader takes some off at the first target and lets the rest run.",
+          ),
         stopLossBps: z.number().int().positive().nullable().default(null),
         trailingActivateAtBps: z
           .number()
@@ -459,7 +537,9 @@ export function buildServer(runtime: Runtime): McpServer {
           .nonnegative()
           .nullable()
           .default(null)
-          .describe("Gain at which a trailing stop switches on. Null disables trailing."),
+          .describe(
+            "Gain at which a trailing stop switches on. Null disables trailing.",
+          ),
         trailingBps: z.number().int().positive().nullable().default(null),
         breakevenAtBps: z
           .number()
@@ -467,13 +547,21 @@ export function buildServer(runtime: Runtime): McpServer {
           .positive()
           .nullable()
           .default(null)
-          .describe("Gain after which the stop moves to entry so the trade cannot lose."),
-        quantity: z.string().nullable().default(null).describe("Null means the whole balance."),
+          .describe(
+            "Gain after which the stop moves to entry so the trade cannot lose.",
+          ),
+        quantity: z
+          .string()
+          .nullable()
+          .default(null)
+          .describe("Null means the whole balance."),
         entryPrice: z
           .string()
           .nullable()
           .default(null)
-          .describe("What the position cost. Null uses the current bid, which only suits a fresh entry."),
+          .describe(
+            "What the position cost. Null uses the current bid, which only suits a fresh entry.",
+          ),
         holdDays: z.number().int().positive().max(90).default(30),
         market: z
           .enum(["spot", "futures"])
@@ -490,7 +578,10 @@ export function buildServer(runtime: Runtime): McpServer {
         const trailing =
           args.trailingActivateAtBps === null || args.trailingBps === null
             ? null
-            : { activateAtBps: args.trailingActivateAtBps, trailBps: args.trailingBps };
+            : {
+                activateAtBps: args.trailingActivateAtBps,
+                trailBps: args.trailingBps,
+              };
         const result = await runtime.planExit({
           symbol: args.symbol,
           ladder: args.takeProfit,
@@ -513,7 +604,9 @@ export function buildServer(runtime: Runtime): McpServer {
       description:
         "Hand Telt a position to manage, using the code from the plan. After this it sells on its own " +
         "when the rules say so, WITHOUT asking again. Only ever pass a code the human typed.",
-      inputSchema: { code: z.string().describe("The code from the plan, e.g. KTL-4B7QK2.") },
+      inputSchema: {
+        code: z.string().describe("The code from the plan, e.g. KTL-4B7QK2."),
+      },
     },
     async ({ code }) =>
       guard(() => {
@@ -547,7 +640,10 @@ export function buildServer(runtime: Runtime): McpServer {
       guard(async () => {
         const result = await runtime.checkPositions();
         if (result.halted !== null) {
-          return text(["The monitor is halted.", "", result.halted].join("\n"), true);
+          return text(
+            ["The monitor is halted.", "", result.halted].join("\n"),
+            true,
+          );
         }
         if (result.checked === 0) {
           return text("No armed plans to check.");
@@ -568,7 +664,9 @@ export function buildServer(runtime: Runtime): McpServer {
       title: "Telt cancel plan",
       description:
         "Stop managing a position. The position itself is untouched and becomes the human's again.",
-      inputSchema: { id: z.string().describe("The plan id from telt_positions.") },
+      inputSchema: {
+        id: z.string().describe("The plan id from telt_positions."),
+      },
     },
     async ({ id }) =>
       guard(() => {
@@ -589,10 +687,13 @@ export function buildServer(runtime: Runtime): McpServer {
         withEvidence: z
           .boolean()
           .default(false)
-          .describe("Include the research receipts behind decisions that took evidence."),
+          .describe(
+            "Include the research receipts behind decisions that took evidence.",
+          ),
       },
     },
-    async ({ limit, withEvidence }) => guard(() => text(runtime.journal(limit, withEvidence))),
+    async ({ limit, withEvidence }) =>
+      guard(() => text(runtime.journal(limit, withEvidence))),
   );
 
   // ---- Holdings, track record, and the memory loop. -------------------------
@@ -610,7 +711,9 @@ export function buildServer(runtime: Runtime): McpServer {
         deep: z
           .boolean()
           .default(false)
-          .describe("Buy paid research on flagged holdings. Costs real money; leave false to look for free."),
+          .describe(
+            "Buy paid research on flagged holdings. Costs real money; leave false to look for free.",
+          ),
       },
     },
     async ({ deep }) => guard(async () => text(await runtime.watch(deep))),
@@ -657,8 +760,13 @@ export function buildServer(runtime: Runtime): McpServer {
         lessons: z
           .array(
             z.object({
-              symbol: z.string().describe("Symbol the lesson is about, or '*' for all."),
-              text: z.string().min(1).describe("The lesson, in a sentence somebody can act on."),
+              symbol: z
+                .string()
+                .describe("Symbol the lesson is about, or '*' for all."),
+              text: z
+                .string()
+                .min(1)
+                .describe("The lesson, in a sentence somebody can act on."),
             }),
           )
           .min(1),
@@ -695,7 +803,10 @@ export function buildServer(runtime: Runtime): McpServer {
         "unfulfillable rather than as something it will try to sell. " +
         "The kill switch is never carried: safety is per machine.",
       inputSchema: {
-        snapshot: z.string().min(10).describe("The snapshot text, exactly as it was stored."),
+        snapshot: z
+          .string()
+          .min(10)
+          .describe("The snapshot text, exactly as it was stored."),
       },
     },
     async ({ snapshot: body }) =>
@@ -719,20 +830,33 @@ export function buildServer(runtime: Runtime): McpServer {
         "10 USDT of margin. Binance's futures minimum is 20 USDT of position on most pairs. " +
         "The proposal shows where the exchange would liquidate you.",
       inputSchema: {
-        symbol: z.string().describe("Futures symbol, uppercase, for example ETHUSDT."),
-        side: z.enum(["BUY", "SELL"]).describe("BUY opens a long, SELL opens a short."),
-        notional: z.string().describe('Position size in quote currency, e.g. "30".'),
+        symbol: z
+          .string()
+          .describe("Futures symbol, uppercase, for example ETHUSDT."),
+        side: z
+          .enum(["BUY", "SELL"])
+          .describe("BUY opens a long, SELL opens a short."),
+        notional: z
+          .string()
+          .describe('Position size in quote currency, e.g. "30".'),
         leverage: z
           .number()
           .int()
           .min(1)
           .default(3)
-          .describe("Whole number. Telt refuses anything above its configured ceiling."),
+          .describe(
+            "Whole number. Telt refuses anything above its configured ceiling.",
+          ),
       },
     },
     async ({ symbol, side, notional, leverage }) =>
       guard(async () => {
-        const result = await runtime.proposeFutures({ symbol, side, notional, leverage });
+        const result = await runtime.proposeFutures({
+          symbol,
+          side,
+          notional,
+          leverage,
+        });
         return text(result.body, !result.ok);
       }),
   );
@@ -745,7 +869,9 @@ export function buildServer(runtime: Runtime): McpServer {
         "Open the futures position the human approved, using the exact code. " +
         "THIS OPENS A LEVERAGED POSITION THAT CAN LOSE MORE THAN THE MARGIN AND CANNOT BE UNDONE. " +
         "Only ever pass a code the human typed. Never invent, complete, guess or reuse one.",
-      inputSchema: { code: z.string().describe("The code from the futures proposal.") },
+      inputSchema: {
+        code: z.string().describe("The code from the futures proposal."),
+      },
     },
     async ({ code }) =>
       guard(async () => {
@@ -795,7 +921,8 @@ export function buildServer(runtime: Runtime): McpServer {
           .describe("Which symbols to check. Futures has no cheap list-all."),
       },
     },
-    async ({ symbols }) => guard(async () => text(await runtime.describeFutures(symbols))),
+    async ({ symbols }) =>
+      guard(async () => text(await runtime.describeFutures(symbols))),
   );
 
   return server;
@@ -839,7 +966,8 @@ async function main(): Promise<void> {
   try {
     runtime = createRuntime({ config: loadConfig(process.env) });
   } catch (cause) {
-    const message = cause instanceof ConfigError ? cause.message : String(cause);
+    const message =
+      cause instanceof ConfigError ? cause.message : String(cause);
     log.error("telt could not start", { problem: message });
     process.stderr.write(`\nTelt could not start.\n${message}\n`);
     process.exitCode = 1;

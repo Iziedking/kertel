@@ -307,8 +307,8 @@ export function evaluateProposal(input: {
   readonly filters: SymbolFilters;
   readonly market: MarketSnapshot;
   readonly account: AccountSnapshot;
-  readonly realisedLossToday: FixedPoint;
-  readonly openExposure: FixedPoint;
+  readonly realisedLossToday: FixedPoint | null;
+  readonly openExposure: FixedPoint | null;
   readonly now: Instant;
 }): Result<Passed, Refusal> {
   const { policy, candidate, filters, market, now } = input;
@@ -434,7 +434,7 @@ export function evaluateProposal(input: {
     );
   }
 
-  if (fp.greaterThan(input.realisedLossToday, policy.trading.maxDailyLoss)) {
+  if (input.realisedLossToday !== null && candidate.side === "BUY" && fp.greaterThan(input.realisedLossToday, policy.trading.maxDailyLoss)) {
     return refuse(
       "DAILY_LOSS_CAP_REACHED",
       `Today's realised loss has passed your ${fp.format(policy.trading.maxDailyLoss)} ${filters.quoteAsset} limit. No new trades until 00:00 UTC.`,
@@ -445,8 +445,8 @@ export function evaluateProposal(input: {
     );
   }
 
-  const exposureAfter = fp.add(input.openExposure, candidate.estimatedNotional);
-  if (fp.greaterThan(exposureAfter, policy.trading.maxOpenExposure)) {
+  const exposureAfter = input.openExposure === null ? null : fp.add(input.openExposure, candidate.estimatedNotional);
+  if (exposureAfter !== null && candidate.side === "BUY" && fp.greaterThan(exposureAfter, policy.trading.maxOpenExposure)) {
     return refuse(
       "OPEN_EXPOSURE_ABOVE_CAP",
       `This would take your open exposure to ${fp.format(exposureAfter)} ${filters.quoteAsset}, above your ${fp.format(policy.trading.maxOpenExposure)} limit.`,

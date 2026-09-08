@@ -1,0 +1,13 @@
+# Telt Binance Agent OS delivery
+
+Approved September 8: implement audit improvements and replace the public frontend while retaining the Telt logo and visual quality. Existing PLAN.md and research remain historical.
+
+Sequence: regression tests; honest offline verification and independent browser verification; durable research/decision/proposal binding; fresh execution checks; remove unsupported account-wide guarantees and block discretionary entry without complete risk accounting; protective exit before optional explanation; keep active public tenant monitors alive; reproducible offline proof bundle; frontend; local QA; deploy reviewed frontend to existing telt Vercel project and its existing domains. Never place a live trade or buy research during verification.
+
+UI brief: retain Fredoka wordmark, Hanken Grotesk body, Space Mono numbers, signal red, ink/cream surfaces, rounded editorial geometry. Investigating trader needs to see question, missing evidence, research cost, action boundaries, and limits of verification. Primary CTA opens an interactive fixture demonstration; secondary CTA connects an MCP client; independent receipt checker is always accessible. Pages: home, demo, verify, setup. Fixture mode is explicit at every stage and uses generated outputs of actual product functions. No invented profit, account or portfolio data. No browser credential collection. Signature checks run locally; optional public-chain lookup reports verified, failed or unavailable independently. No claim of timestamp anchoring or provider-authenticated content unless checked.
+
+Accessibility: semantic navigation, one h1 per page, visible labels and focus, live result announcements, minimum 44px actions, mobile menu, no horizontal overflow at 390px, contrast AA, reduced motion, working dark/light. Errors retain inputs and give retry; invalid receipt is different from RPC unavailable.
+
+Evidence: official Binance announcement and Agent OS sources in HACKATHON_RESEARCH.md; x402 offers/receipts https://docs.x402.org/extensions/offer-receipt checked September 8; actual repo audit docs/HACKATHON_AUDIT_2026-09-08.md; current Telt brand and deployed arena reviewed September 8. Rejected: anonymous paid research (operator spend), browser trading-key form (unnecessary credential exposure), generalized dashboard (distracts from evidence loop), new cryptographic protocol (unearned deadline risk).
+
+Acceptance: full tests/typecheck, offline proof generation, production frontend build, independent valid/tampered/fabricated receipt controls, run-binding mixup/stale/restart tests, provider timeout cannot prevent protective exit, live URL matches local build, DNS retained if existing domain assignment already routes correctly.

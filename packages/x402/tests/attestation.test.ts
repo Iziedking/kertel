@@ -210,6 +210,6 @@ describe("pointing a verifier at the chain", () => {
     // Not a failure: an attestation over free sources is a legitimate thing to
     // hold. It just proves less, and must say which.
     expect(payment?.status).toBe("info");
-    expect(payment?.detail).toContain("free sources only");
+    expect(payment?.detail).toContain("does not prove which sources were read");
   });
 });

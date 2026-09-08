@@ -34,7 +34,9 @@ type FakeOptions = {
   readonly averagePrice?: string | null;
   readonly ask?: string;
   readonly balance?: string;
-  readonly onPlace?: () => Awaited<ReturnType<BinanceClient["placeMarketOrder"]>>;
+  readonly onPlace?: () => Awaited<
+    ReturnType<BinanceClient["placeMarketOrder"]>
+  >;
   readonly onFind?: () => Awaited<ReturnType<BinanceClient["findOrder"]>>;
 };
 
@@ -50,7 +52,9 @@ function filled(quantity: string, price: string): PlacedOrder {
   };
 }
 
-function fakeBinance(options: FakeOptions = {}): BinanceClient & { placements: number } {
+function fakeBinance(
+  options: FakeOptions = {},
+): BinanceClient & { placements: number } {
   const ask = options.ask ?? "2505.66";
   const client = {
     placements: 0,
@@ -80,14 +84,20 @@ function fakeBinance(options: FakeOptions = {}): BinanceClient & { placements: n
         canTradeSpot: true,
         observedAt: NOW,
         balances: [
-          { asset: "USDT", free: fp.parse(options.balance ?? "500.00"), locked: fp.parse("0") },
+          {
+            asset: "USDT",
+            free: fp.parse(options.balance ?? "500.00"),
+            locked: fp.parse("0"),
+          },
           { asset: "ETH", free: fp.parse("1.0"), locked: fp.parse("0") },
         ],
       });
     },
     async placeMarketOrder() {
       client.placements += 1;
-      return options.onPlace === undefined ? ok(filled("0.0039", "2505.70")) : options.onPlace();
+      return options.onPlace === undefined
+        ? ok(filled("0.0039", "2505.70"))
+        : options.onPlace();
     },
     async findOrder() {
       return options.onFind === undefined ? ok(null) : options.onFind();
@@ -96,11 +106,13 @@ function fakeBinance(options: FakeOptions = {}): BinanceClient & { placements: n
   return client as unknown as BinanceClient & { placements: number };
 }
 
-function build(options: {
-  store?: Store;
-  binance?: BinanceClient;
-  live?: boolean;
-} = {}) {
+function build(
+  options: {
+    store?: Store;
+    binance?: BinanceClient;
+    live?: boolean;
+  } = {},
+) {
   const store = options.store ?? openStore(":memory:");
   const binance = options.binance ?? fakeBinance();
   const runtime = createRuntime({
@@ -212,7 +224,11 @@ describe("a slow exchange", () => {
       newId: (prefix: string) => `${prefix}-test`,
     });
 
-    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const result = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
 
     expect(result.refusalCode).not.toBe("MARKET_DATA_STALE");
     expect(result.ok).toBe(true);
@@ -249,7 +265,11 @@ describe("a slow exchange", () => {
       newId: (prefix: string) => `${prefix}-test`,
     });
 
-    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const result = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     expect(result.refusalCode).toBe("MARKET_DATA_STALE");
     runtime.close();
   });
@@ -258,7 +278,11 @@ describe("a slow exchange", () => {
 describe("preparing an order", () => {
   it("shows the numbers that will actually be sent", async () => {
     const { runtime } = build();
-    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const result = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
 
     expect(result.ok).toBe(true);
     expect(result.body).toContain("BUY ETHUSDT");
@@ -271,7 +295,11 @@ describe("preparing an order", () => {
 
   it("says how much the exchange step size left unspent", async () => {
     const { runtime } = build();
-    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const result = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     // 10 / 2505.66 floored to 0.0001 steps cannot spend the full ten.
     expect(result.body).toContain("unspent");
     runtime.close();
@@ -279,7 +307,11 @@ describe("preparing an order", () => {
 
   it("refuses below the exchange minimum and names the shortfall", async () => {
     const { runtime } = build();
-    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "3" });
+    const result = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "3",
+    });
 
     expect(result.ok).toBe(false);
     expect(result.refusalCode).toBe("NOTIONAL_BELOW_EXCHANGE_MINIMUM");
@@ -289,7 +321,11 @@ describe("preparing an order", () => {
 
   it("refuses above the configured per-trade cap", async () => {
     const { runtime } = build();
-    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "100" });
+    const result = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "100",
+    });
     expect(result.refusalCode).toBe("NOTIONAL_ABOVE_CAP");
     runtime.close();
   });
@@ -297,8 +333,14 @@ describe("preparing an order", () => {
   it("checks the minimum against the venue average, not just the last price", async () => {
     // Sized at the ask this clears 5.00; against the venue's own five-minute
     // average it does not, and the exchange would reject it.
-    const { runtime } = build({ binance: fakeBinance({ ask: "2505.66", averagePrice: "2000.00" }) });
-    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "5.10" });
+    const { runtime } = build({
+      binance: fakeBinance({ ask: "2505.66", averagePrice: "2000.00" }),
+    });
+    const result = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "5.10",
+    });
 
     expect(result.ok).toBe(false);
     expect(result.refusalCode).toBe("NOTIONAL_BELOW_EXCHANGE_MINIMUM");
@@ -307,21 +349,33 @@ describe("preparing an order", () => {
 
   it("says when no venue average was available", async () => {
     const { runtime } = build({ binance: fakeBinance({ averagePrice: null }) });
-    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const result = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     expect(result.body).toContain("No venue average available");
     runtime.close();
   });
 
   it("refuses when the balance will not cover it", async () => {
     const { runtime } = build({ binance: fakeBinance({ balance: "1.00" }) });
-    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "20" });
+    const result = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "20",
+    });
     expect(result.refusalCode).toBe("INSUFFICIENT_BALANCE");
     runtime.close();
   });
 
   it("refuses an amount it cannot read, rather than guessing", async () => {
     const { runtime } = build();
-    const result = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "ten dollars" });
+    const result = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "ten dollars",
+    });
     expect(result.refusalCode).toBe("AMOUNT_NOT_UNDERSTOOD");
     runtime.close();
   });
@@ -330,7 +384,11 @@ describe("preparing an order", () => {
 describe("confirming an order", () => {
   it("stops at the live write gate after everything else passed", async () => {
     const { runtime, binance } = build();
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     const result = await runtime.confirm(codeFrom(proposal.body));
 
     expect(result.refusalCode).toBe("LIVE_EXECUTION_DISABLED");
@@ -341,7 +399,11 @@ describe("confirming an order", () => {
 
   it("leaves the code usable after a dry run, so rehearsing is free", async () => {
     const { runtime } = build();
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     const code = codeFrom(proposal.body);
 
     const first = await runtime.confirm(code);
@@ -373,7 +435,11 @@ describe("confirming an order", () => {
       newId: (prefix: string) => `${prefix}-test`,
     });
 
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     const result = await runtime.confirm(codeFrom(proposal.body));
 
     expect(result.refusalCode).toBe("LIVE_EXECUTION_DISABLED");
@@ -399,7 +465,11 @@ describe("confirming an order", () => {
 
   it("places the order in live mode and reports the fill", async () => {
     const { runtime, binance } = build({ live: true });
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     const result = await runtime.confirm(codeFrom(proposal.body));
 
     expect(result.ok).toBe(true);
@@ -412,7 +482,11 @@ describe("confirming an order", () => {
 
   it("burns the code, so the same message twice places one order", async () => {
     const { runtime, binance } = build({ live: true });
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     const code = codeFrom(proposal.body);
 
     const first = await runtime.confirm(code);
@@ -426,7 +500,11 @@ describe("confirming an order", () => {
 
   it("will not execute a proposal that was cancelled", async () => {
     const { runtime, binance } = build({ live: true });
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     const code = codeFrom(proposal.body);
 
     runtime.cancel();
@@ -443,10 +521,16 @@ describe("confirming an order", () => {
     // order can never be executed against a code the user approved.
     const store = openStore(":memory:");
     const { runtime } = build({ store, live: true });
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     const code = codeFrom(proposal.body);
 
-    const row = store.trades.latestPreparedProposal(runtime.ownerHash as string);
+    const row = store.trades.latestPreparedProposal(
+      runtime.ownerHash as string,
+    );
     if (row === null) throw new Error("no proposal stored");
     store.trades.saveProposal({ ...row, quantity: "9.9999" });
 
@@ -466,8 +550,16 @@ describe("an order whose result is unknown", () => {
 
   it("stops everything rather than reporting a clean failure", async () => {
     const store = openStore(":memory:");
-    const { runtime } = build({ store, live: true, binance: fakeBinance({ onPlace: timeout }) });
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const { runtime } = build({
+      store,
+      live: true,
+      binance: fakeBinance({ onPlace: timeout }),
+    });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     const result = await runtime.confirm(codeFrom(proposal.body));
 
     expect(result.refusalCode).toBe("EXECUTION_RESULT_UNKNOWN");
@@ -480,7 +572,11 @@ describe("an order whose result is unknown", () => {
     const store = openStore(":memory:");
     const binance = fakeBinance({ onPlace: timeout, onFind: () => ok(null) });
     const { runtime } = build({ store, live: true, binance });
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     await runtime.confirm(codeFrom(proposal.body));
 
     const report = await runtime.reconcile();
@@ -496,7 +592,11 @@ describe("an order whose result is unknown", () => {
       onFind: () => ok(filled("0.0039", "2506.10")),
     });
     const { runtime } = build({ store, live: true, binance });
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     await runtime.confirm(codeFrom(proposal.body));
 
     const report = await runtime.reconcile();
@@ -508,14 +608,28 @@ describe("an order whose result is unknown", () => {
 
   it("blocks a new proposal until it is resolved", async () => {
     const store = openStore(":memory:");
-    const { runtime } = build({ store, live: true, binance: fakeBinance({ onPlace: timeout }) });
-    const proposal = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const { runtime } = build({
+      store,
+      live: true,
+      binance: fakeBinance({ onPlace: timeout }),
+    });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     await runtime.confirm(codeFrom(proposal.body));
 
-    const next = await runtime.propose({ symbol: "ETHUSDT", side: "BUY", notional: "10" });
+    const next = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
     expect(next.ok).toBe(false);
     // The kill switch fires first; either refusal is a stop.
-    expect(["KILL_SWITCH_ENGAGED", "PENDING_OPERATION_UNRECONCILED"]).toContain(next.refusalCode);
+    expect(["KILL_SWITCH_ENGAGED", "PENDING_OPERATION_UNRECONCILED"]).toContain(
+      next.refusalCode,
+    );
     store.close();
   });
 });
@@ -548,5 +662,118 @@ describe("reconciliation", () => {
     expect(report).toContain("chain explorer");
     expect(report).toContain("Telt stays stopped");
     store.close();
+  });
+});
+
+describe("research bound to an order", () => {
+  function seed(
+    runtime: ReturnType<typeof build>["runtime"],
+    patch: Record<string, unknown> = {},
+  ) {
+    runtime.store.research.save({
+      id: "run-eth",
+      symbol: "ETHUSDT",
+      mode: runtime.mode,
+      goal: "trade_thesis",
+      createdAt: NOW,
+      expiresAt: NOW + 120000,
+      policyVersion: runtime.config.policy.version,
+      provenance: "eth-evidence",
+      evidenceIds: ["ev-eth"],
+      body: "fixture",
+      ...patch,
+    });
+  }
+  it("rejects a research run from another symbol before proposing", async () => {
+    const { runtime } = build();
+    seed(runtime, { symbol: "BTCUSDT" });
+    expect(
+      (
+        await runtime.propose({
+          symbol: "ETHUSDT",
+          side: "BUY",
+          notional: "10",
+          researchRunId: "run-eth",
+        })
+      ).refusalCode,
+    ).toBe("INSUFFICIENT_EVIDENCE");
+    runtime.close();
+  });
+  it("rejects citations outside the stored run and refuses a NO_TRADE buy", async () => {
+    const { runtime } = build();
+    seed(runtime);
+    const input = {
+      researchRunId: "run-eth",
+      recommendation: "NO_TRADE" as const,
+      summary: "No tested entry rule supports this trade.",
+      supportingEvidence: ["ev-eth"],
+      invalidatedBy: ["Fresh evidence and a tested entry rule"],
+      modelId: "test",
+    };
+    expect(
+      runtime.decide({ ...input, supportingEvidence: ["invented"] }).ok,
+    ).toBe(false);
+    const decision = runtime.decide(input);
+    expect(decision.ok).toBe(true);
+    if (decision.ok)
+      expect(
+        (
+          await runtime.propose({
+            symbol: "ETHUSDT",
+            side: "BUY",
+            notional: "10",
+            decisionId: decision.decisionId,
+          })
+        ).refusalCode,
+      ).toBe("NO_TRADE_RECOMMENDED");
+    runtime.close();
+  });
+  it("keeps the exact research provenance through confirmation", async () => {
+    const { runtime, store } = build({ live: true });
+    seed(runtime);
+    const decision = runtime.decide({
+      researchRunId: "run-eth",
+      recommendation: "BUY_CANDIDATE",
+      summary: "Explicit test thesis attached to this run.",
+      supportingEvidence: ["ev-eth"],
+      invalidatedBy: ["Quote leaves the accepted range"],
+      modelId: "test",
+    });
+    if (!decision.ok) throw new Error(decision.body);
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+      decisionId: decision.decisionId,
+    });
+    expect(proposal.ok).toBe(true);
+    store.attestations.save("unrelated-btc", "unrelated receipt", NOW + 1);
+    const result = await runtime.confirm(codeFrom(proposal.body));
+    expect(result.ok).toBe(true);
+    expect(result.body).toContain("provenance=eth-evidence");
+    expect(result.body).not.toContain("unrelated-btc");
+    runtime.close();
+  });
+  it("rechecks available balance before sending an approved order", async () => {
+    const venue = fakeBinance();
+    const initial = venue.account;
+    let reads = 0;
+    venue.account = async () => {
+      const account = await initial();
+      if (++reads > 1 && account.ok)
+        return ok({ ...account.value, balances: [] });
+      return account;
+    };
+    const { runtime } = build({ live: true, binance: venue });
+    const proposal = await runtime.propose({
+      symbol: "ETHUSDT",
+      side: "BUY",
+      notional: "10",
+    });
+    expect((await runtime.confirm(codeFrom(proposal.body))).refusalCode).toBe(
+      "INSUFFICIENT_BALANCE",
+    );
+    expect(venue.placements).toBe(0);
+    runtime.close();
   });
 });
