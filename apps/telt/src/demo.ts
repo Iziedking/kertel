@@ -6,6 +6,7 @@ import type { Verdict } from "@telt/core/autonomy";
 
 import type { BinanceClient } from "./infra/binance.js";
 import type { ModelClient } from "./infra/model.js";
+import type { PublicResearchResult } from "./demo-research.js";
 
 const SUPPORTED_ASSETS = ["BTC", "ETH", "BNB", "SOL"] as const;
 const QUESTION_LIMIT = 500;
@@ -23,6 +24,12 @@ export type DemoResponse = {
     readonly observedAt: string;
     readonly source: string;
   };
+  readonly research: PublicResearchResult;
+  readonly trace: readonly {
+    readonly id: string;
+    readonly status: "live" | "unavailable";
+    readonly detail: string;
+  }[];
   readonly verdict: Verdict;
   readonly model: string;
   readonly cached: boolean;
@@ -42,6 +49,7 @@ type DemoDeps = {
   readonly modelName: string;
   readonly dailyLimit: number;
   readonly perMinuteLimit: number;
+  readonly research?: (symbol: Symbol_) => Promise<PublicResearchResult>;
   readonly now?: () => number;
 };
 
@@ -85,6 +93,37 @@ function evidence(market: MarketSnapshot): string {
     "Coverage limit: no news, flows, fundamentals, portfolio, or position data was supplied.",
     "No order will be placed from this answer.",
   ].join("\n");
+}
+
+function researchEvidence(research: PublicResearchResult): string {
+  if (research.status === "unavailable") {
+    return [
+      "COINGECKO PUBLIC RESEARCH",
+      "Status: unavailable",
+      `Reason: ${research.reason ?? "No reason supplied."}`,
+      "This corroboration source did not answer. Do not infer a price or market edge from its absence.",
+    ].join("\n");
+  }
+  return [
+    "COINGECKO PUBLIC RESEARCH",
+    `Price: ${research.priceUsd ?? "unavailable"} USD`,
+    `24-hour change: ${research.change24hPct === null ? "unavailable" : `${research.change24hPct}%`}`,
+    `Observed at: ${research.observedAt}`,
+    `Source: ${research.source}`,
+    "This is free read-only price corroboration, not smart-money flow, news, fundamentals, or portfolio data.",
+  ].join("\n");
+}
+
+function fallbackResearch(now: () => number): PublicResearchResult {
+  return {
+    status: "unavailable",
+    provider: "coingecko",
+    source: "coingecko:simple/price",
+    priceUsd: null,
+    change24hPct: null,
+    observedAt: new Date(now()).toISOString(),
+    reason: "Public research was not configured on this server.",
+  };
 }
 
 function marketView(market: MarketSnapshot): DemoResponse["market"] {
@@ -143,7 +182,10 @@ export function createDemoService(deps: DemoDeps): DemoService {
         return { ok: false, status: 429, code: "DAILY_LIMIT", error: "The live model demo has reached today's call limit. The MCP endpoint is still available." };
       }
 
-      const market = await deps.binance.market(symbol);
+      const [market, research] = await Promise.all([
+        deps.binance.market(symbol),
+        deps.research === undefined ? Promise.resolve(fallbackResearch(now)) : deps.research(symbol),
+      ]);
       if (!market.ok) {
         return { ok: false, status: 502, code: market.error.code, error: market.error.detail };
       }
@@ -151,7 +193,7 @@ export function createDemoService(deps: DemoDeps): DemoService {
       callsToday += 1;
       const judged: Result<Verdict, Refusal> = await deps.model.judge({
         symbol,
-        evidence: evidence(market.value),
+        evidence: `${evidence(market.value)}\n\n${researchEvidence(research)}`,
       });
       if (!judged.ok) {
         return { ok: false, status: 502, code: judged.error.code, error: judged.error.detail };
@@ -162,13 +204,24 @@ export function createDemoService(deps: DemoDeps): DemoService {
         question,
         symbol,
         market: marketView(market.value),
+        research,
+        trace: [
+          { id: "binance.market", status: "live", detail: "bookTicker + avgPrice" },
+          {
+            id: "coingecko.public-price",
+            status: research.status,
+            detail: research.status === "live" ? "free price and 24-hour change" : research.reason ?? "unavailable",
+          },
+          { id: "claude.verdict", status: "live", detail: "validated Verdict JSON" },
+        ],
         verdict: judged.value,
         model: deps.modelName,
         cached: false,
         boundaries: [
           "Public Binance market data only",
+          "Free CoinGecko price corroboration only",
           "No account or portfolio access",
-          "No paid research and no order execution",
+          "No paid x402 research and no order execution",
         ],
       };
       cache.set(cacheKey, { expiresAt: at + CACHE_MS, value });

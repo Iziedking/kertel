@@ -46,6 +46,7 @@ import { createLogger } from "./infra/logger.js";
 import type { Logger } from "./infra/logger.js";
 import { createDemoService } from "./demo.js";
 import type { DemoService } from "./demo.js";
+import { createPublicResearchClient } from "./demo-research.js";
 
 /** The header a caller uses to bring their own Binance Agent OS token. */
 export const TOKEN_HEADER = "x-telt-binance-token";
@@ -188,12 +189,14 @@ export function createHttpServer(options: HttpServerOptions): Server {
   }
 
   const anonymous = runtimeFor(null);
+  const publicResearch = createPublicResearchClient();
   const demo = options.demo ?? createDemoService({
     binance: anonymous.binance,
     model: anonymous.model,
     modelName: anonymous.config.model ?? "claude-sonnet-5",
     dailyLimit: positiveInteger(process.env["TELT_DEMO_DAILY_CALLS"], 0),
     perMinuteLimit: positiveInteger(process.env["TELT_DEMO_CALLS_PER_MINUTE"], 4),
+    research: publicResearch,
   });
 
   const sweep = setInterval(() => {

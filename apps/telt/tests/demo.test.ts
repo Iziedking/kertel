@@ -22,15 +22,26 @@ function service(options: { readonly daily?: number; readonly minute?: number; r
     risks: ["The snapshot has no news, flow, or portfolio context."],
   }));
   const model: ModelClient = { available: true, judge };
+  const research = vi.fn(async () => ({
+    status: "live" as const,
+    provider: "coingecko" as const,
+    source: "coingecko:simple/price",
+    priceUsd: "3500.12",
+    change24hPct: "2.3400",
+    observedAt: "2026-09-08T00:00:00.000Z",
+    reason: null,
+  }));
   return {
     market,
     judge,
+    research,
     value: createDemoService({
       binance: { market },
       model,
       modelName: "claude-test",
       dailyLimit: options.daily ?? 20,
       perMinuteLimit: options.minute ?? 4,
+      research,
       now: options.now,
     }),
   };
@@ -48,8 +59,10 @@ describe("public live demo", () => {
     const result = await demo.value.analyze("Should I buy ETH?", "visitor-a");
     expect(result).toMatchObject({ ok: true, symbol: "ETHUSDT", cached: false });
     expect(demo.market).toHaveBeenCalledOnce();
+    expect(demo.research).toHaveBeenCalledOnce();
     expect(demo.judge).toHaveBeenCalledOnce();
     expect(demo.judge.mock.calls[0]?.[0].evidence).toContain("No order will be placed");
+    expect(demo.judge.mock.calls[0]?.[0].evidence).toContain("COINGECKO PUBLIC RESEARCH");
     expect(demo.judge.mock.calls[0]?.[0].evidence).not.toContain("Should I buy ETH?");
   });
 
@@ -61,6 +74,7 @@ describe("public live demo", () => {
     const cached = await demo.value.analyze("Should I buy ETH?", "visitor-a");
     expect(cached).toMatchObject({ ok: true, cached: true });
     expect(demo.market).toHaveBeenCalledOnce();
+    expect(demo.research).toHaveBeenCalledOnce();
     expect(demo.judge).toHaveBeenCalledOnce();
   });
 
@@ -72,6 +86,7 @@ describe("public live demo", () => {
       code: "DAILY_LIMIT",
     });
     expect(demo.market).not.toHaveBeenCalled();
+    expect(demo.research).not.toHaveBeenCalled();
     expect(demo.judge).not.toHaveBeenCalled();
   });
 

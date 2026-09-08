@@ -30,27 +30,42 @@ Telt turns that ongoing job into one inspectable mandate.
 The model explains what happened. It does not decide whether protection is required and cannot override the controller.
 
 ```mermaid
-flowchart LR
-    U[Trader in ChatGPT or Codex] --> M[Telt MCP]
-    M --> D[Versioned Guard mandate]
-    D --> W[30 second local monitor]
-    W --> A[Binance Agent OS]
-    A --> S[Spot balance]
-    A --> F[USD-M Futures position]
-    S --> C[Deterministic coverage controller]
-    F --> C
-    C --> O[Durable adjustment record]
-    O --> A
-    A --> R[Final position check]
-    R --> L[Memory Lane]
-    R --> K[Kill switch on uncertainty]
+flowchart TB
+  subgraph PUBLIC[Public read-only surface]
+    BROWSER[Web demo] --> DEMO[POST /demo]
+    DEMO --> BINANCE_PUBLIC[Binance public market data]
+    DEMO --> COINGECKO[CoinGecko public price pass]
+    BINANCE_PUBLIC --> EVIDENCE[Bounded evidence block]
+    COINGECKO --> EVIDENCE
+    EVIDENCE --> CLAUDE[Claude verdict schema]
+    CLAUDE --> CHECK[Verdict validation]
+    CHECK --> BROWSER
+  end
+
+  subgraph LOCAL[User-owned Agent OS runtime]
+    USER[Trader in ChatGPT or Codex] --> MCP[Telt MCP]
+    MCP --> MANDATE[Versioned Guard mandate]
+    MANDATE --> MONITOR[30 second local monitor]
+    MONITOR --> AGENTOS[Binance Agent OS]
+    AGENTOS --> SPOT[Spot balance]
+    AGENTOS --> FUTURES[USD-M Futures position]
+    SPOT --> CONTROLLER[Deterministic coverage controller]
+    FUTURES --> CONTROLLER
+    CONTROLLER --> OP[Durable adjustment record]
+    OP --> AGENTOS
+    AGENTOS --> RECON[Final position reconciliation]
+    RECON --> MEMORY[Memory Lane]
+    RECON --> HALT[Persistent kill switch on uncertainty]
+    MCP --> RESEARCH[Paid x402 research on request]
+    RESEARCH --> MEMORY
+  end
 ```
 
 ## Why Binance Agent OS matters
 
 Agent OS is the account and execution layer. The local Telt process uses the trader's own Agent OS session to read Spot balances, inspect USD-M Futures positions, change the permitted hedge, and verify the result. Account credentials stay in the user's environment.
 
-The hosted MCP endpoint and public website have no Binance account access. They are safe surfaces for judges to inspect the agent without receiving the operator's token.
+By default, the hosted MCP endpoint and public website carry no Binance account credential. They are safe surfaces for anyone to inspect the agent without receiving the operator's token.
 
 ## What is built
 
@@ -68,10 +83,10 @@ The hosted MCP endpoint and public website have no Binance account access. They 
 | Protection Watch | Reads both legs for free and reports current coverage, net exposure, and Futures PnL |
 | Memory Lane | Renders the protection lifecycle from the durable local journal |
 | Paid research | Buys outside context only when requested, records the cost, and never controls the hedge |
-| Public demo | Reads a live public Binance market snapshot and returns a checked Claude verdict without account or order access |
+| Public demo | Reads live Binance data, corroborates it with a free CoinGecko price pass, and returns a checked Claude verdict without account or order access |
 | Receipt verifier | Checks the EIP-191 signature over displayed claims in the browser and states what the signature does not prove |
 
-Telt supports a token when the same USDT pair is trading on Binance Spot and USD-M Futures. BTC, ETH, BNB, and SOL use the same path. Spot-only assets are refused.
+The execution path is pair-driven, not hardcoded to four assets. It accepts an uppercase Binance USDT pair when the configured symbol policy allows it and the same pair trades on Spot and USD-M Futures. A fresh install defaults to `ETHUSDT` and `BTCUSDT`; set `TELT_ALLOWED_SYMBOLS=*` or provide a comma-separated list to enable other pairs. Spot-only pairs and pairs outside policy are refused. The public web demo currently uses BTC, ETH, BNB, and SOL as its second-source examples. That demo mapping is separate from the local trading engine's symbol policy.
 
 ## Use Telt conversationally
 
@@ -88,15 +103,17 @@ Revoke SOL Guard Mode.
 
 The MCP instructions map those requests to the correct tools. Read-only checks run without extra confirmation. Telt explains the mandate boundary before `telt_guard_arm`, and that call requires the user's approval. Manual Spot and Futures entries still use one-use confirmation codes.
 
-### Hosted MCP
+### Hosted MCP for public inspection
 
-Use this endpoint to inspect Telt without account access:
+Anyone can add this endpoint to a compatible MCP client:
 
 ```text
 https://mcp.telt.site/mcp
 ```
 
-The hosted service can answer public market questions. It cannot see or trade a user's Binance account.
+The no-account connection exposes public market checks, Telt capability discovery, and receipt verification. It has no trading authority and does not open a Binance login flow.
+
+Binance's official MCP prompts users to authorize Agent OS and creates an Agentic sub-account during onboarding when needed. Telt does not yet pass that authorization into its hosted 30-second monitor. Full Guard Mode therefore runs in the user's local Telt process with the user's own Agent OS session. Do not paste an account token into ChatGPT or a website form.
 
 ### Local MCP with Agent OS
 
@@ -134,11 +151,12 @@ Keep tokens, keys, local databases, demo notes, audit reports, and assistant wor
 The homepage demonstrates the reasoning boundary without an account:
 
 1. The backend reads a fresh public Binance book.
-2. It sends only the bounded market evidence to the model.
-3. The model response must match Telt's verdict schema.
-4. The browser shows the source time, risks, confidence, and no-order boundary.
+2. It fetches a second public price and 24-hour change from CoinGecko.
+3. It sends only the bounded evidence to Claude, never the visitor's wording as evidence.
+4. The model response must match Telt's verdict schema.
+5. The browser shows the provider status, observed times, execution trace, risks, confidence, and no-order boundary.
 
-The public question is kept separate from the evidence block, so a user's wording cannot be misreported as prompt-injection evidence. The route has no account, research-wallet, or order capability.
+This is free read-only corroboration. Smart-money flow research remains a local MCP capability that spends the caller's own x402 budget. The public route has no account, research-wallet, or order capability.
 
 ## Research and Memory Lane
 
@@ -170,6 +188,7 @@ The monitor uses 30 second polling. WebSocket event intake and transition notifi
 
 Next work:
 
+- add a supported Agent OS authorization handoff and a user-owned hosted Guard runtime
 - discover and price all account assets and open Futures positions for full-account risk totals
 - reconcile interrupted Agent OS orders by deterministic client order ID
 - add WebSocket events with polling reconciliation
@@ -202,17 +221,4 @@ scripts/            reproducible proof and live read-only probes
 fixtures/           recorded exchange and provider responses for offline tests
 ```
 
-## Track A submission story
-
-The demo should show one memorable loop:
-
-1. Approve Guard Mode for a funded Spot holding.
-2. Show Telt classify it as unprotected and open the permitted isolated short.
-3. Change the Spot quantity so the hedge drifts.
-4. Force a monitor sweep and show the bounded adjustment.
-5. Open Binance beside the MCP conversation and show the real Spot balance, Futures position, and order reference.
-6. Show Memory Lane, then revoke the mandate and prove that future adjustments are no longer permitted.
-
-This demonstrates a persistent agent behavior that depends on Binance Agent OS: account reads, Spot and Futures state, controlled execution, fill verification, and revocable authority.
-
-[Track A demo notes](docs/TRACK_A_DEMO.md) | [Architecture](docs/ARCHITECTURE.md) | [MCP setup](https://telt.site/connect)
+[Architecture](docs/ARCHITECTURE.md) | [MCP setup](https://telt.site/connect)

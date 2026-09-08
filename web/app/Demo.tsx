@@ -8,6 +8,16 @@ type DemoResult = {
   readonly question: string;
   readonly symbol: string;
   readonly market: { readonly bestBid: string; readonly bestAsk: string; readonly averagePrice: string | null; readonly spreadBps: number; readonly observedAt: string; readonly source: string };
+  readonly research: {
+    readonly status: "live" | "unavailable";
+    readonly provider: "coingecko";
+    readonly source: string;
+    readonly priceUsd: string | null;
+    readonly change24hPct: string | null;
+    readonly observedAt: string;
+    readonly reason: string | null;
+  };
+  readonly trace: readonly { readonly id: string; readonly status: "live" | "unavailable"; readonly detail: string }[];
   readonly verdict: { readonly action: "BUY_CANDIDATE" | "NO_TRADE" | "INSUFFICIENT_EVIDENCE"; readonly confidence: number; readonly because: string; readonly risks: readonly string[] };
   readonly model: string;
   readonly cached: boolean;
@@ -77,15 +87,16 @@ export default function Demo() {
           </form>
           <div className="demo-steps" aria-label="Agent path">
             <span className={loading ? "active" : ""}>01 · Read Binance</span>
-            <span className={loading ? "active" : ""}>02 · Reason with Claude</span>
-            <span>03 · Validate the verdict</span>
+            <span className={loading ? "active" : ""}>02 · Corroborate with CoinGecko</span>
+            <span className={loading ? "active" : ""}>03 · Reason with Claude</span>
+            <span>04 · Validate the verdict</span>
           </div>
         </div>
         <div className="demo-result" aria-live="polite" aria-busy={loading}>
           <p className="eyebrow">THE LIVE DECISION</p>
           {loading && <div className="demo-wait"><span className="thinking-ring" /><h3>Reading evidence before answering.</h3><p>Binance market snapshot, then a constrained model verdict. This usually takes a few seconds.</p></div>}
           {!loading && error && <div className="demo-error"><h3>The look did not complete.</h3><p>{error}</p><button type="button" className="button secondary" onClick={(event) => void run(event)}>Try again</button></div>}
-          {!loading && !error && result === null && <div className="demo-empty"><h3>No canned answer here.</h3><p>Run a question to create a fresh market snapshot and a checked model verdict.</p></div>}
+          {!loading && !error && result === null && <div className="demo-empty"><h3>Run a live research pass.</h3><p>Telt creates a fresh Binance snapshot, checks a second public source, and asks Claude for a constrained verdict.</p></div>}
           {!loading && !error && result !== null && (
             <>
               <div className="verdict-head">
@@ -98,6 +109,24 @@ export default function Demo() {
                 <div><span>Best bid</span><strong>{result.market.bestBid}</strong></div>
                 <div><span>Best ask</span><strong>{result.market.bestAsk}</strong></div>
                 <div><span>Spread</span><strong>{result.market.spreadBps.toFixed(2)} bps</strong></div>
+              </div>
+              <div className="research-panel">
+                <div className="research-panel-head">
+                  <strong>Live research pass</strong>
+                  <span className={`research-status ${result.research.status}`}>{result.research.status === "live" ? "LIVE" : "UNAVAILABLE"}</span>
+                </div>
+                {result.research.status === "live" ? (
+                  <div className="research-facts">
+                    <div><span>CoinGecko price</span><strong>${result.research.priceUsd}</strong></div>
+                    <div><span>24-hour change</span><strong>{result.research.change24hPct === null ? "Unavailable" : `${result.research.change24hPct}%`}</strong></div>
+                  </div>
+                ) : <p className="research-unavailable">{result.research.reason ?? "The corroboration source did not answer."}</p>}
+                <p className="research-meta">{result.research.source} · observed {new Date(result.research.observedAt).toLocaleString()}</p>
+                <p className="research-note">Free read-only corroboration. Smart-money flow still requires a local MCP session with your own x402 budget.</p>
+              </div>
+              <div className="trace-panel">
+                <strong>Execution trace</strong>
+                <ol>{result.trace.map((step) => <li key={step.id}><span className={`trace-dot ${step.status}`} /> <span>{step.detail}</span></li>)}</ol>
               </div>
               {result.verdict.risks.length > 0 && <div className="risk-list"><strong>What could change the view</strong><ul>{result.verdict.risks.map((risk) => <li key={risk}>{risk}</li>)}</ul></div>}
               <div className="receipt live-receipt">

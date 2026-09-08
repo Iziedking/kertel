@@ -11,9 +11,9 @@ export default function Connect() {
           Connect when ready<span className="red">.</span>
         </h1>
         <p className="lede">
-          The website demo needs no account. It reads public Binance market
-          data and shows how Telt reasons. Run the local MCP when you want Guard
-          Mode to use your own Binance Agent OS session.
+          The website demo and hosted MCP need no account. Use them to inspect
+          Telt from a browser or AI client. Run Telt locally when you want Guard
+          Mode to watch your own Binance Agent OS account.
         </p>
       </header>
 
@@ -36,8 +36,8 @@ export default function Connect() {
         </section>
 
         <section className="panel">
-          <p className="eyebrow">OPTION 2 / MCP CLIENT</p>
-          <h3>Give your AI the Telt endpoint.</h3>
+          <p className="eyebrow">OPTION 2 / PUBLIC MCP</p>
+          <h3>Inspect Telt from ChatGPT.</h3>
           <p>
             Add this URL as a remote MCP server in ChatGPT or your preferred AI
             client:
@@ -49,25 +49,25 @@ export default function Connect() {
             <li>Paste the endpoint, then start chatting with Telt.</li>
           </ol>
           <p>
-            Start by asking: <strong>“What can Telt do?”</strong> With your own
-            local account session, try:
-            <strong> “Guard my SOL at 100% coverage and 2x for 24 hours.”</strong>
-            Telt will explain the boundary and ask for one approval before it
-            arms the mandate.
+            Ask <strong>“What can Telt do?”</strong>, scan public Binance
+            markets, or verify a Telt receipt. These checks need no account and
+            carry no trading authority.
           </p>
           <p className="notice">
-            The hosted MCP cannot use your Binance account. Live protection
-            runs through your local Telt process and your Binance Agent OS
-            session. Keep the token in the local environment.
+            The hosted Telt endpoint does not open Binance authorization or
+            create an Agentic sub-account. Binance&apos;s official MCP handles
+            that login flow. Telt&apos;s full Guard Mode currently runs through a
+            local process so its monitor can stay active.
           </p>
         </section>
 
         <section className="panel full-width">
-          <p className="eyebrow">IF YOU ARE RUNNING TELT LOCALLY</p>
-          <h3>Use the local MCP server.</h3>
+          <p className="eyebrow">OPTION 3 / FULL GUARD MODE</p>
+          <h3>Run the account monitor locally.</h3>
           <p>
-            This is for developers who want the runtime on their own machine.
-            It is separate from the one-click remote connection above.
+            The local runtime uses your own Agent OS session, keeps the
+            30-second monitor alive, and stores your mandates and Memory Lane
+            on your machine.
           </p>
           <pre className="code">{`npm ci
 npm run check
@@ -79,6 +79,12 @@ node apps/telt/dist/serve.js`}</pre>
             the absolute path to <code>apps/telt/dist/mcp.js</code>. Start in
             fixture mode while learning the workflow. Account access is
             configured in your local environment, never in a browser form.
+          </p>
+          <p>
+            Then ask:
+            <strong> “Guard my SOL at 100% coverage and 2x for 24 hours.”</strong>
+            Telt will show the mandate boundary and request approval before it
+            starts watching the position.
           </p>
         </section>
 
