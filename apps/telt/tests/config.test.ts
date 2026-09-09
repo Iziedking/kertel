@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isAbsolute } from "node:path";
 
 import * as fp from "@telt/core/money";
 
@@ -183,5 +184,30 @@ describe("the sender salt", () => {
     const first = loadConfig(env({ TELT_OWNER_WHATSAPP: "+12025550123" }));
     const second = loadConfig(env({ TELT_OWNER_WHATSAPP: "+12025550124" }));
     expect(first.senderSalt).not.toBe(second.senderSalt);
+  });
+});
+
+/**
+ * The data directory is where every durable trade record lives, so where it
+ * resolves to matters more than most defaults. An MCP client launches the
+ * server with its own working directory, so a relative default silently grew
+ * one database per folder the same install was ever started from, and a guard
+ * armed in one was invisible to the others.
+ */
+describe("the data directory", () => {
+  it("defaults to an absolute path, so the working directory cannot fork the state", () => {
+    const config = loadConfig(env());
+    expect(isAbsolute(config.dataDir)).toBe(true);
+  });
+
+  it("resolves to the same place no matter who launched the process", () => {
+    const fromOneClient = loadConfig(env({ LOCALAPPDATA: "C:\Users\a\AppData\Local" }));
+    const fromAnother = loadConfig(env({ LOCALAPPDATA: "C:\Users\a\AppData\Local" }));
+    expect(fromOneClient.dataDir).toBe(fromAnother.dataDir);
+  });
+
+  it("still lets an operator say exactly where state goes, which is what the container image does", () => {
+    const config = loadConfig(env({ TELT_DATA_DIR: "/data" }));
+    expect(config.dataDir).toBe("/data");
   });
 });

@@ -18,6 +18,9 @@
  * it must parse.
  */
 
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import { z } from "zod";
 
 import * as fp from "@telt/core/money";
@@ -152,6 +155,35 @@ function setting(env: Env, name: string): string | null {
   const current = present(env[`TELT_${name}`]);
   if (current !== null) return current;
   return present(env[`KERTEL_${name}`]);
+}
+
+/**
+ * Where durable state lives when the operator has not said.
+ *
+ * This default used to be `./data`, and that is a bug with a long fuse. An MCP
+ * client spawns the server with *its own* working directory, so one install
+ * grew one database per folder it had ever been started from — on the machine
+ * that found this, four of them, including one inside another vendor's `bin`
+ * directory. Nothing errored. The trades, the spend ledger and the guard state
+ * simply went to whichever file the current client happened to point at, and a
+ * guard armed in one was invisible to the other three.
+ *
+ * State belongs to the user, not to the directory a client was sitting in when
+ * it launched us. So the default is absolute and per-user, and the only way to
+ * move it is to say so — which is what the container image does with
+ * `TELT_DATA_DIR=/data`.
+ *
+ * Read from the injected env rather than `process.env` so this stays a pure
+ * function of its input, like everything else in this file; `homedir()` is the
+ * last resort for a process started with no home variable at all.
+ */
+function defaultDataDir(env: Env): string {
+  const local = present(env["LOCALAPPDATA"]);
+  if (local !== null) return join(local, "telt", "data");
+  const state = present(env["XDG_STATE_HOME"]);
+  if (state !== null) return join(state, "telt", "data");
+  const home = present(env["HOME"]) ?? present(env["USERPROFILE"]) ?? homedir();
+  return join(home, ".telt", "data");
 }
 
 function parseOr(name: string, raw: string | null, schema: z.ZodType<unknown>): unknown {
@@ -372,7 +404,7 @@ export function loadConfig(env: Env): TeltConfig {
 
   return {
     mode,
-    dataDir: setting(env, "DATA_DIR") ?? "./data",
+    dataDir: setting(env, "DATA_DIR") ?? defaultDataDir(env),
     logLevel: (rawLevel ?? "info") as TeltConfig["logLevel"],
     ownerWhatsApp: owner,
     // Derived from the owner rather than configured: one fewer secret to
